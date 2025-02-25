@@ -4,6 +4,7 @@ members = [
     "bitvm",
     "bridge",
     "fuzz",
+    "goat",
 ]
 
 [workspace.dependencies]
