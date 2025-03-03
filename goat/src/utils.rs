@@ -2,8 +2,6 @@ use std::path::{Path, PathBuf};
 
 use bitcode::{Decode, Encode};
 use bitcoin::Network;
-use bitcoin_script::{script, Script};
-use bitvm::{bigint::BigIntImpl, pseudo::NMUL};
 
 const NUM_BLOCKS_REGTEST: u32 = 2;
 const NUM_BLOCKS_TESTNET: u32 = 2;

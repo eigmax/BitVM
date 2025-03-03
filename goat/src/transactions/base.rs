@@ -50,7 +50,7 @@ pub const MIN_RELAY_FEE_ASSERT_COMMIT1: u64 = relay_fee(739137);
 pub const MIN_RELAY_FEE_ASSERT_COMMIT2: u64 = relay_fee(470440);
 pub const MIN_RELAY_FEE_ASSERT_FINAL: u64 = relay_fee(352);
 pub const MIN_RELAY_FEE_CHALLENGE: u64 = relay_fee(317);
-pub const MIN_RELAY_FEE_DISPROVE: u64 = relay_fee(194415);
+pub const MIN_RELAY_FEE_DISPROVE: u64 = relay_fee(1000000);
 
 pub struct Input {
     pub outpoint: OutPoint,
