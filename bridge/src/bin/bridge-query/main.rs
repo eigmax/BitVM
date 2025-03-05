@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "local" => (Network::Regtest, DestinationNetwork::Local),
             _ => {
                 eprintln!("Invalid environment. Use mainnet, testnet.");
-                std::process::exit(1);
+                std::process::exit(1)
             }
         };
     let prefix = matches.get_one::<String>("prefix").map(|s| s.as_str());

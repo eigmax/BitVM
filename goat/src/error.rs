@@ -39,6 +39,7 @@ pub enum ChunkerError {
 pub enum Error {
     Transaction(TransactionError),
     Chunker(ChunkerError),
+    Connector(ConnectorError),
     Other(&'static str),
 }
 
