@@ -1,7 +1,5 @@
 use bitcoin::{
-    absolute,
-    consensus::{self},
-    Amount, EcdsaSighashType, Network, PublicKey, ScriptBuf, Transaction, TxOut,
+    absolute, consensus::{self}, Amount, EcdsaSighashType, Network, PublicKey, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness
 };
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +13,56 @@ use super::super::{
     pre_signed::*,
     signing::populate_p2wsh_witness_with_signatures,
 };
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub struct PegInDepositTransactionGeneral {
+    #[serde(with = "consensus::serde::With::<consensus::serde::Hex>")]
+    tx: Transaction,
+}
+
+impl PegInDepositTransactionGeneral {
+    pub fn new_unsigned(
+        connector_z: &ConnectorZ,
+        input_0: Input,
+        input_0_sequence: Sequence,
+    ) -> Self {
+        let _input_0 = TxIn {
+            previous_output: input_0.outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: input_0_sequence,
+            witness: Witness::default(),
+        };
+
+        let total_output_amount = input_0.amount - Amount::from_sat(MIN_RELAY_FEE_PEG_IN_DEPOSIT);
+
+        let _output_0 = TxOut {
+            value: total_output_amount,
+            script_pubkey: connector_z.generate_taproot_address().script_pubkey(),
+        };
+
+        PegInDepositTransactionGeneral {
+            tx: Transaction {
+                version: bitcoin::transaction::Version(2),
+                lock_time: absolute::LockTime::ZERO,
+                input: vec![_input_0],
+                output: vec![_output_0],
+            }
+        }
+    }
+
+    pub fn add_unlock_witness(&mut self, witness: Witness) {
+        self.tx.input[0].witness = witness
+    }
+
+    pub fn tx_mut(&mut self) -> &mut Transaction {
+        &mut self.tx
+    }
+}
+
+impl BaseTransaction for PegInDepositTransactionGeneral {
+    fn finalize(&self) -> Transaction { self.tx.clone() }
+    fn name(&self) -> &'static str { "PegInDeposit" }
+}
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct PegInDepositTransaction {

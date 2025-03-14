@@ -1,6 +1,6 @@
 use bitcoin::{
     absolute, consensus, Amount, EcdsaSighashType, Network, PublicKey, ScriptBuf, Transaction,
-    TxOut,
+    TxOut, Witness, Sequence, TxIn
 };
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +13,56 @@ use super::{
     base::*,
     pre_signed::*,
 };
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub struct PreKickoffTransaction {
+    #[serde(with = "consensus::serde::With::<consensus::serde::Hex>")]
+    tx: Transaction,
+}
+
+impl PreKickoffTransaction {
+    pub fn new_unsigned(
+        connector_6: &Connector6,
+        input_0: Input,
+        input_0_sequence: Sequence,
+    ) -> Self {
+        let _input_0 = TxIn {
+            previous_output: input_0.outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: input_0_sequence,
+            witness: Witness::default(),
+        };
+
+        let total_output_amount = input_0.amount - Amount::from_sat(MIN_RELAY_FEE_PEG_OUT_CONFIRM);
+
+        let _output_0 = TxOut {
+            value: total_output_amount,
+            script_pubkey: connector_6.generate_taproot_address().script_pubkey(),
+        };
+
+        PreKickoffTransaction {
+            tx: Transaction {
+                version: bitcoin::transaction::Version(2),
+                lock_time: absolute::LockTime::ZERO,
+                input: vec![_input_0],
+                output: vec![_output_0],
+            }
+        }
+    }
+
+    pub fn add_unlock_witness(&mut self, witness: Witness) {
+        self.tx.input[0].witness = witness
+    }
+
+    pub fn tx_mut(&mut self) -> &mut Transaction {
+        &mut self.tx
+    }
+}
+
+impl BaseTransaction for PreKickoffTransaction {
+    fn finalize(&self) -> Transaction { self.tx.clone() }
+    fn name(&self) -> &'static str { "PreKickoff" }
+}
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct PegOutConfirmTransaction {

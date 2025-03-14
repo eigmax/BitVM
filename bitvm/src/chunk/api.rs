@@ -280,6 +280,24 @@ pub fn generate_signatures(
     Ok(sigs)
 }
 
+// skip validations
+pub fn generate_signatures_lit(
+    proof: ark_groth16::Proof<Bn<ark_bn254::Config>>,
+    scalars: Vec<ark_bn254::Fr>,
+    vk: &ark_groth16::VerifyingKey<Bn254>,
+    secrets: Vec<String>,
+) -> Result<Signatures, String> {
+    println!("generate_signatures; get_segments_from_groth16_proof");
+    let (success, segments) = get_segments_from_groth16_proof(proof, scalars, vk);
+    if !success {
+        return Err(format!("generate_signatures; get_segments_from_groth16_proof; success false; num_aggregated segments {}", segments.len()));
+    }
+    println!("generate_signatures; get_assertion_from_segments");
+    let assn = get_assertion_from_segments(&segments);
+    println!("generate_signatures; get_signature_from_assertion");
+    Ok(get_signature_from_assertion(assn, secrets.clone()))
+}
+
 // Step 4
 // validate signed assertions
 // returns index of disprove script generated in Step 2 

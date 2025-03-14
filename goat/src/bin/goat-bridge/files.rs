@@ -1,18 +1,31 @@
 use bitvm::treepp::*;
-use bitvm::chunk::api::{Signatures as WotsSignatures, PublicKeys as WotsPublicKeys, NUM_PUBS, NUM_U160, NUM_U256};
+use bitvm::chunk::api::{Signatures as Groth16WotsSignatures, PublicKeys as Groth16WotsPublicKeys, NUM_PUBS, NUM_U160, NUM_U256};
 use bitvm::signatures::wots_api::{wots256, wots160};
+use bitvm::signatures::signing_winternitz::{WinternitzPublicKey, WinternitzSecret};
 use ark_bn254::Bn254;
 use bitcoin::ScriptBuf;
 use goat_bridge::proof::{deserialize_proof, deserialize_vk, deserialize_pubin};
+use goat_bridge::commitments::NUM_KICKOFF;
 use std::collections::HashMap;
 use std::io::{Write, BufReader};
 use std::fs::{File, self};
 use std::path::Path;
 
 const NUM_SIGS: usize = NUM_PUBS + NUM_U160 + NUM_U256;
-pub type WotsSecretKeys = [String; NUM_SIGS];
+pub type KickoffWotsSecretKeys = [WinternitzSecret; NUM_KICKOFF];
+pub type Groth16WotsSecretKeys = [String; NUM_SIGS];
+pub type WotsSecretKeys = (
+    KickoffWotsSecretKeys,
+    Groth16WotsSecretKeys,
+);
 
-pub fn write_signed_assertions_to_file(file: &str, sigs: WotsSignatures) { 
+pub type KickoffWotsPublicKeys = [WinternitzPublicKey; NUM_KICKOFF];
+pub type WotsPublicKeys = (
+    KickoffWotsPublicKeys,
+    Groth16WotsPublicKeys,
+);
+
+pub fn write_signed_assertions_to_file(file: &str, sigs: Groth16WotsSignatures) { 
     let mut sigs_map: HashMap<u32, Vec<Vec<u8>>> = HashMap::new();
     let mut index = 0;
     for ss in *sigs.0 {
@@ -44,7 +57,7 @@ pub fn write_signed_assertions_to_file(file: &str, sigs: WotsSignatures) {
     }
     write_map_to_file(&sigs_map, file);
 }
-pub fn load_signed_assertions_from_file(file: &str) -> WotsSignatures {
+pub fn load_signed_assertions_from_file(file: &str) -> Groth16WotsSignatures {
     let sigs_map = read_map_from_file(file).expect(&format!("fail to open {:?}", file));
     const W256_LEN: u32 = wots256::N_DIGITS * 2;
     const W160_LEN: u32 = wots160::N_DIGITS * 2;
@@ -119,7 +132,7 @@ pub fn load_groth16_pubin(file: &str) -> Vec<ark_bn254::Fr> {
 
 pub fn write_wots_seckeys(file: &str, seckeys: WotsSecretKeys) {
     create_necessary_dir(file);
-    let json = serde_json::to_vec(&seckeys.to_vec()).unwrap();
+    let json = serde_json::to_vec_pretty(&(seckeys.0.to_vec(), seckeys.1.to_vec())).unwrap();
     let mut file = File::create(file).unwrap();
     file.write_all(&json).unwrap();  
 }
@@ -127,37 +140,51 @@ pub fn load_wots_seckeys(file: &str) -> WotsSecretKeys {
     create_necessary_dir(file);
     let file = File::open(file).expect(&format!("fail to open {:?}", file));
     let reader = BufReader::new(file);
-    let seckeys_vec: Vec<String> = serde_json::from_reader(reader).unwrap();
-    seckeys_vec.try_into().unwrap()
+    let seckeys_vec: (Vec<WinternitzSecret>, Vec<String>) = serde_json::from_reader(reader).unwrap();
+    (
+        seckeys_vec.0.try_into().unwrap_or_else(|_e| panic!("kickoff bitcom keys number not match")),
+        seckeys_vec.1.try_into().unwrap(),
+    )
 }
 
 pub fn write_wots_pubkeys(file: &str, pubkeys: WotsPublicKeys) {
     let mut pubkeys_map: HashMap<u32, Vec<Vec<u8>>> = HashMap::new();
     let mut index = 0;
+    // wots pk for groth16 proof 
+    for pk in pubkeys.1.0 {
+        let mut v: Vec<Vec<u8>> = Vec::new();
+        for d in pk {
+            v.push(d.to_vec());
+        }
+        pubkeys_map.insert(index, v);
+        index += 1;
+    }
+    for pk in pubkeys.1.1 {
+        let mut v: Vec<Vec<u8>> = Vec::new();
+        for d in pk {
+            v.push(d.to_vec());
+        }
+        pubkeys_map.insert(index, v);
+        index += 1;
+    }
+    for pk in pubkeys.1.2 {
+        let mut v: Vec<Vec<u8>> = Vec::new();
+        for d in pk {
+            v.push(d.to_vec());
+        }
+        pubkeys_map.insert(index, v);
+        index += 1;
+    }
+
+    // wots pk for kickoff bitcommitment
+    let mut v_kickoff: Vec<Vec<u8>> = Vec::new();
     for pk in pubkeys.0 {
-        let mut v: Vec<Vec<u8>> = Vec::new();
-        for d in pk {
-            v.push(d.to_vec());
-        }
-        pubkeys_map.insert(index, v);
-        index += 1;
+        let pk_vec = serde_json::to_vec(&pk).unwrap();
+        v_kickoff.push(pk_vec);
     }
-    for pk in pubkeys.1 {
-        let mut v: Vec<Vec<u8>> = Vec::new();
-        for d in pk {
-            v.push(d.to_vec());
-        }
-        pubkeys_map.insert(index, v);
-        index += 1;
-    }
-    for pk in pubkeys.2 {
-        let mut v: Vec<Vec<u8>> = Vec::new();
-        for d in pk {
-            v.push(d.to_vec());
-        }
-        pubkeys_map.insert(index, v);
-        index += 1;
-    }
+    pubkeys_map.insert(index, v_kickoff);
+    // index += 1;
+
     write_map_to_file(&pubkeys_map, file);
 }
 pub fn load_wots_pubkeys(file: &str) -> WotsPublicKeys {
@@ -207,14 +234,30 @@ pub fn load_wots_pubkeys(file: &str) -> WotsPublicKeys {
     }
     let pk2: [wots160::PublicKey; NUM_U160] = pk2.try_into().unwrap();
 
-    let res = (pk0, pk1, pk2);
+    let mut pk_kickoff: Vec<WinternitzPublicKey> = vec![];
+    let (min, max) = (max, max + NUM_KICKOFF);
+    for i in min..max {
+        let v = pubkeys_map.get(&(i as u32)).unwrap();
+        assert!(v.len() == NUM_KICKOFF, "Invalid kickoff wots public-key number");
+        for i in 0..NUM_KICKOFF {
+            pk_kickoff.push(
+                serde_json::from_slice(&v[i as usize].clone()).unwrap()
+            );
+        }
+    }
+    let pk_kickoff: [WinternitzPublicKey; NUM_KICKOFF] = pk_kickoff.try_into().unwrap_or_else(|_e| panic!("kickoff bitcom keys number not match"));
+
+    let res = (
+        pk_kickoff,
+        (pk0, pk1, pk2),
+    );
     res
 }
 
 pub fn write_scripts_to_file(file: &str, scripts: Vec<Script>) {
     create_necessary_dir(file);
     let scripts_bytes: Vec<Vec<u8>> = scripts.into_iter().map(|x| x.compile().to_bytes()).collect();
-    let json = serde_json::to_vec(&scripts_bytes).unwrap();
+    let json = serde_json::to_vec_pretty(&scripts_bytes).unwrap();
     let mut file = File::create(file).unwrap();
     file.write_all(&json).unwrap();
 }
@@ -231,13 +274,36 @@ pub fn load_scripts_from_file(file: &str) -> Vec<Script> {
         }).collect()
 }
 
+pub fn write_disprove_witness(file: &str, index: usize, witness: Script) {
+    create_necessary_dir(file);
+    let witness_bytes = witness.compile().to_bytes();
+    let json = serde_json::to_vec_pretty(&(index, witness_bytes)).unwrap();
+    let mut file = File::create(file).unwrap();
+    file.write_all(&json).unwrap();
+}
+pub fn load_disprove_witness(file: &str) -> (usize, Script) {
+    let file = File::open(file).expect(&format!("fail to open {:?}", file));
+    let reader = BufReader::new(file);
+    let (index, witness_bytes): (usize, Vec<u8>)  = serde_json::from_reader(reader).unwrap();
+    let sc = script! {};
+    let bf = ScriptBuf::from_bytes(witness_bytes);
+    let sc = sc.push_script(bf);
+    (index, sc)
+}
+
 pub(crate) fn file_exists(file: &str) -> bool {
     Path::new(file).exists()
 }
 
+pub(crate) fn create_necessary_dir(path: &str) {
+    if let Some(parent) = Path::new(path).parent() {
+        fs::create_dir_all(parent).unwrap(); 
+    };
+}
+
 fn write_map_to_file(map: &HashMap<u32, Vec<Vec<u8>>>, file: &str) {
     create_necessary_dir(file);
-    let json = serde_json::to_vec(map).unwrap();
+    let json = serde_json::to_vec_pretty(map).unwrap();
     let mut file = File::create(file).unwrap();
     file.write_all(&json).unwrap();
 }
@@ -246,10 +312,4 @@ fn read_map_from_file(file: &str) -> Result<HashMap<u32, Vec<Vec<u8>>>, String> 
     let reader = BufReader::new(file);
     let map = serde_json::from_reader(reader).unwrap();
     Ok(map)
-}
-
-fn create_necessary_dir(path: &str) {
-    if let Some(parent) = Path::new(path).parent() {
-        fs::create_dir_all(parent).unwrap(); 
-    };
 }

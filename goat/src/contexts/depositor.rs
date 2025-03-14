@@ -2,6 +2,7 @@ use bitcoin::{key::Keypair, Network, PublicKey, XOnlyPublicKey};
 
 use super::base::{generate_keys_from_secret, generate_n_of_n_public_key, BaseContext};
 
+#[derive(Debug)]
 pub struct DepositorContext {
     pub network: Network,
 

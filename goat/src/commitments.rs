@@ -3,9 +3,17 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-use bitvm::{chunk::api::{NUM_PUBS, NUM_U160, NUM_U256}, signatures::signing_winternitz::WinternitzSecret};
+use bitvm::{
+    chunk::api::{
+        PublicKeys as ApiPublicKeys, NUM_PUBS, NUM_U160, NUM_U256
+    }, 
+    signatures::{signing_winternitz::{WinternitzPublicKey, WinternitzSecret, LOG_D}, winternitz::Parameters}
+};
 
 use super::constants::EVM_TXID_LENGTH;
+
+pub const NUM_KICKOFF: usize = 1;
+pub const KICKOFF_MSG_SIZE: [usize; NUM_KICKOFF] = [EVM_TXID_LENGTH];
 
 #[derive(
     Serialize, Deserialize, Eq, PartialEq, Hash, Clone, PartialOrd, Ord, Display, Debug, EnumIter,
@@ -62,6 +70,49 @@ impl TryFrom<String> for CommitmentMessageId {
 }
 
 impl CommitmentMessageId {
+    pub fn pubkey_map_for_kickoff(raw_pubkeys: [WinternitzPublicKey; NUM_KICKOFF]) -> HashMap<CommitmentMessageId, WinternitzPublicKey> {
+        HashMap::from([
+            (
+                CommitmentMessageId::EvmWithdrawTxid,
+                raw_pubkeys[0].clone(),
+            ),
+        ])
+    }
+
+    pub fn pubkey_map_for_assert(raw_pubkeys: ApiPublicKeys) -> HashMap<CommitmentMessageId, WinternitzPublicKey> {
+        let mut commitment_map = HashMap::new();
+        for i in 0..NUM_PUBS {
+            commitment_map.insert(
+                CommitmentMessageId::Groth16IntermediateValues((format!("{}", i), 32)),
+                WinternitzPublicKey {
+                    public_key: raw_pubkeys.0[i].to_vec(),
+                    parameters: Parameters::new_by_bit_length(8 * 32, LOG_D),
+                }
+            );
+        }
+        for i in 0..NUM_U256 {
+            commitment_map.insert(
+                CommitmentMessageId::Groth16IntermediateValues((format!("{}", i + NUM_PUBS), 32)),
+                WinternitzPublicKey {
+                    public_key: raw_pubkeys.1[i].to_vec(),
+                    parameters: Parameters::new_by_bit_length(8 * 32, LOG_D),
+                }
+            );
+        }
+        for i in 0..NUM_U160 {
+            commitment_map.insert(
+                CommitmentMessageId::Groth16IntermediateValues((format!("{}", i + NUM_PUBS + NUM_U256), 20)),
+                WinternitzPublicKey {
+                    public_key: raw_pubkeys.2[i].to_vec(),
+                    parameters: Parameters::new_by_bit_length(8 * 20, LOG_D),
+                }
+            );
+        }
+
+        commitment_map
+    }
+
+
     // btree map is a copy of chunker related commitments
     pub fn generate_commitment_secrets() -> HashMap<CommitmentMessageId, WinternitzSecret> {
         println!("Generating commitment secrets ...");
