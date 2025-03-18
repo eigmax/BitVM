@@ -105,6 +105,10 @@ impl ChallengeTransaction {
         );
     }
 
+    pub fn pre_sign(&mut self, context: &OperatorContext, connector_a: &ConnectorA) {
+        self.sign_input_0(context, connector_a)
+    }
+
     // allows for aggregating multiple inputs and one refund output
     pub fn add_inputs_and_output(
         &mut self,

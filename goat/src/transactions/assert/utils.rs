@@ -7,7 +7,10 @@ use crate::{
 };
 
 use bitvm::{
-    chunk::api::{generate_signatures_for_any_proof, type_conversion_utils::{utils_raw_witnesses_from_signatures, RawProof, RawWitness}}, 
+    chunk::api::{
+        generate_signatures_for_any_proof, PublicKeys as ApiPublicKeys,
+        type_conversion_utils::{utils_raw_witnesses_from_signatures, RawProof, RawWitness}
+    }, 
     signatures::signing_winternitz::{WinternitzPublicKey, WinternitzSecret}
 };
 
@@ -79,6 +82,47 @@ pub fn sign_assert_tx_with_groth16_proof(
     let raw2 = raw[300..].to_vec();
 
     (raw1, raw2)
+}
+
+pub fn split_pubkeys(raw_pubkeys: &ApiPublicKeys) -> (
+    Vec<BTreeMap<CommitmentMessageId, WinternitzPublicKey>>,
+    Vec<BTreeMap<CommitmentMessageId, WinternitzPublicKey>>,
+) {
+    let connectors_e_of_transaction = 300;
+    let mut connector_e1_commitment_public_keys = vec![];
+    let mut connector_e2_commitment_public_keys = vec![];
+
+    let commitment_pubkeys = CommitmentMessageId::pubkey_map_for_assert(raw_pubkeys);
+
+    let mut pubkeys_vec = vec![];
+    for (message_id, pubkey) in commitment_pubkeys.iter() {
+        if let CommitmentMessageId::Groth16IntermediateValues((name, _)) = message_id {
+            let index = u32::from_str_radix(name, 10).unwrap();
+            pubkeys_vec.push((index, (message_id, pubkey)));
+        }
+    }
+
+    pubkeys_vec.sort_by(|a, b| a.0.cmp(&b.0));
+    for (_, (message_id, pubkey)) in pubkeys_vec {
+        let pushing_keys =
+        if connector_e1_commitment_public_keys.len() < connectors_e_of_transaction {
+            &mut connector_e1_commitment_public_keys
+        } else {
+            &mut connector_e2_commitment_public_keys
+        };
+
+        pushing_keys.push(BTreeMap::from([(
+            message_id.clone(),
+            pubkey.clone(),
+        )]));
+    }
+
+    assert!(connector_e1_commitment_public_keys.len() <= connectors_e_of_transaction);
+    assert!(connector_e2_commitment_public_keys.len() <= connectors_e_of_transaction);
+    (
+        connector_e1_commitment_public_keys,
+        connector_e2_commitment_public_keys,
+    )
 }
 
 pub fn groth16_commitment_secrets_to_public_keys(

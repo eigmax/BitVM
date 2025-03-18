@@ -193,6 +193,20 @@ impl ConnectorC {
         }
     }
 
+    pub fn new_from_scripts(
+        network: Network,
+        operator_taproot_public_key: &XOnlyPublicKey,
+        commitment_public_keys: BTreeMap<CommitmentMessageId, WinternitzPublicKey>,
+        lock_scripts_bytes: Vec<Vec<u8>>,
+    ) -> Self {
+        ConnectorC {
+            network,
+            operator_taproot_public_key: *operator_taproot_public_key,
+            lock_scripts_bytes,
+            commitment_public_keys,
+        }
+    }
+
     pub fn generate_disprove_witness(
         &self,
         commit_1_witness: Vec<RawWitness>,

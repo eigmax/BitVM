@@ -70,7 +70,7 @@ impl TryFrom<String> for CommitmentMessageId {
 }
 
 impl CommitmentMessageId {
-    pub fn pubkey_map_for_kickoff(raw_pubkeys: [WinternitzPublicKey; NUM_KICKOFF]) -> HashMap<CommitmentMessageId, WinternitzPublicKey> {
+    pub fn pubkey_map_for_kickoff(raw_pubkeys: &[WinternitzPublicKey; NUM_KICKOFF]) -> HashMap<CommitmentMessageId, WinternitzPublicKey> {
         HashMap::from([
             (
                 CommitmentMessageId::EvmWithdrawTxid,
@@ -79,7 +79,7 @@ impl CommitmentMessageId {
         ])
     }
 
-    pub fn pubkey_map_for_assert(raw_pubkeys: ApiPublicKeys) -> HashMap<CommitmentMessageId, WinternitzPublicKey> {
+    pub fn pubkey_map_for_assert(raw_pubkeys: &ApiPublicKeys) -> HashMap<CommitmentMessageId, WinternitzPublicKey> {
         let mut commitment_map = HashMap::new();
         for i in 0..NUM_PUBS {
             commitment_map.insert(

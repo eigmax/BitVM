@@ -29,12 +29,15 @@ pub(crate) enum Commands {
         amount: u64,
     },
 
-    /// -FEDERATION-: federation members presign necessary txns, include: pegin_comfirm, take_1, take_2, assert_final, disprove
-    FederationPresign {
-    },
+    // /// -FEDERATION-: generate psbt for federation members
+    // GenerateFederationPsbt {
+    //     /// (hex String) federation member's public-key
+    //     // #[arg(long)]
+    //     pubkey: String,
+    // },
 
-    /// -FEDERATION-: merge n-n mugsig2 signatures
-    MergeSignatures {
+    /// -FEDERATION-: push federation members' pre-signature for necessary txns, include: pegin_comfirm, take_1, take_2, assert_final, disprove
+    FederationPresign {
     },
 
     /// -OPERATOR---: generate pre-kickoff(pegout-confirm) tx
@@ -56,7 +59,22 @@ pub(crate) enum Commands {
         amount: u64,
     },
 
-    /// -OPERATOR---: operator presign necessary txns, include: challenge
+    // /// -OPERATOR---: generate psbt for operator
+    // GenerateOperatorPsbt {
+    //     // #[arg(long)]
+    //     presign: bool,
+
+    //     // #[arg(long)]
+    //     kickoff: bool,
+
+    //     // #[arg(long)]
+    //     take1: bool,
+
+    //     // #[arg(long)]
+    //     take2: bool,
+    // },
+
+    /// -OPERATOR---: push operator's pre-signature necessary txns, include: challenge
     OperatorPresign {
     },
 
@@ -75,13 +93,13 @@ pub(crate) enum Commands {
         skip_validation: bool,
     },
 
-    /// -CHALLENGER-: check if kickoff-tx is valid
-    ValidateKickoff {
-    },
+    // /// -CHALLENGER-: check if kickoff-tx is valid
+    // ValidateKickoff {
+    // },
 
-    /// -CHALLENGER-: check if the groth16-proof(bitcommitments) submitted by operator in assert-tx is valid 
-    ValidateAssert {
-    },
+    // /// -CHALLENGER-: check if the groth16-proof(bitcommitments) submitted by operator in assert-tx is valid 
+    // ValidateAssert {
+    // },
 
     /// -CHALLENGER-: check if the groth16-proof(bitcommitments) is valid 
     VerifyProof {

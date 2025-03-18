@@ -1,20 +1,16 @@
-use std::collections::HashMap;
-
 use bitcoin::{
     taproot::{TaprootBuilder, TaprootSpendInfo},
     Address, Network, ScriptBuf, TxIn, XOnlyPublicKey,
 };
-use bitvm::signatures::signing_winternitz::WinternitzPublicKey;
 use secp256k1::SECP256K1;
 use serde::{Deserialize, Serialize};
 
-use crate::{commitments::CommitmentMessageId ,scripts::*, transactions::base::Input, connectors::base::*};
+use crate::{scripts::*, transactions::base::Input, connectors::base::*};
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct ConnectorB {
     pub network: Network,
     pub operator_taproot_public_key: XOnlyPublicKey,
-    pub commitment_public_keys: HashMap<CommitmentMessageId, WinternitzPublicKey>,
 }
 
 // TODO: timelock & n-n-pubkey OR just operator-pubkey?
@@ -22,12 +18,10 @@ impl ConnectorB {
     pub fn new(
         network: Network,
         operator_taproot_public_key: &XOnlyPublicKey,
-        commitment_public_keys: &HashMap<CommitmentMessageId, WinternitzPublicKey>,
     ) -> Self {
         ConnectorB {
             network,
             operator_taproot_public_key: *operator_taproot_public_key,
-            commitment_public_keys: commitment_public_keys.clone(),
         }
     }
 
@@ -55,7 +49,7 @@ impl TaprootConnector for ConnectorB {
 
     fn generate_taproot_spend_info(&self) -> TaprootSpendInfo {
         TaprootBuilder::new()
-            .add_leaf(2, self.generate_taproot_leaf_0_script())
+            .add_leaf(0, self.generate_taproot_leaf_0_script())
             .expect("Unable to add leaf 0")
             .finalize(SECP256K1, self.operator_taproot_public_key)
             .expect("Unable to finalize taproot")

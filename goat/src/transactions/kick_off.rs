@@ -18,7 +18,7 @@ use super::{
 use bitvm::signatures::signing_winternitz::{generate_winternitz_witness, WinternitzSigningInputs};
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
-pub struct KickOff1Transaction {
+pub struct KickOffTransaction {
     #[serde(with = "consensus::serde::With::<consensus::serde::Hex>")]
     tx: Transaction,
     #[serde(with = "consensus::serde::With::<consensus::serde::Hex>")]
@@ -26,7 +26,7 @@ pub struct KickOff1Transaction {
     prev_scripts: Vec<ScriptBuf>,
 }
 
-impl PreSignedTransaction for KickOff1Transaction {
+impl PreSignedTransaction for KickOffTransaction {
     fn tx(&self) -> &Transaction { &self.tx }
 
     fn tx_mut(&mut self) -> &mut Transaction { &mut self.tx }
@@ -36,7 +36,7 @@ impl PreSignedTransaction for KickOff1Transaction {
     fn prev_scripts(&self) -> &Vec<ScriptBuf> { &self.prev_scripts }
 }
 
-impl KickOff1Transaction {
+impl KickOffTransaction {
     pub fn new(
         connector_3: &Connector3,
         connector_6: &Connector6,
@@ -81,7 +81,7 @@ impl KickOff1Transaction {
             script_pubkey: connector_b.generate_taproot_address().script_pubkey(),
         };
 
-        KickOff1Transaction {
+        KickOffTransaction {
             tx: Transaction {
                 version: bitcoin::transaction::Version(2),
                 lock_time: absolute::LockTime::ZERO,
@@ -145,7 +145,7 @@ impl KickOff1Transaction {
     }
 }
 
-impl BaseTransaction for KickOff1Transaction {
+impl BaseTransaction for KickOffTransaction {
     fn finalize(&self) -> Transaction { self.tx.clone() }
     fn name(&self) -> &'static str { "KickOff" }
 }

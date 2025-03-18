@@ -262,9 +262,7 @@ pub fn write_scripts_to_file(file: &str, scripts: Vec<Script>) {
     file.write_all(&json).unwrap();
 }
 pub fn load_scripts_from_file(file: &str) -> Vec<Script> {
-    let file = File::open(file).expect(&format!("fail to open {:?}", file));
-    let reader = BufReader::new(file);
-    let scripts_bytes: Vec<Vec<u8>> = serde_json::from_reader(reader).unwrap();
+    let scripts_bytes = load_scripts_bytes_from_file(file);
     scripts_bytes.into_iter()
         .map(|x| {
             let sc = script! {};
@@ -272,6 +270,12 @@ pub fn load_scripts_from_file(file: &str) -> Vec<Script> {
             let sc = sc.push_script(bf);
             sc
         }).collect()
+}
+pub fn load_scripts_bytes_from_file(file: &str) -> Vec<Vec<u8>> {
+    let file = File::open(file).expect(&format!("fail to open {:?}", file));
+    let reader = BufReader::new(file);
+    let scripts_bytes: Vec<Vec<u8>> = serde_json::from_reader(reader).unwrap();
+    scripts_bytes
 }
 
 pub fn write_disprove_witness(file: &str, index: usize, witness: Script) {
@@ -299,6 +303,12 @@ pub(crate) fn create_necessary_dir(path: &str) {
     if let Some(parent) = Path::new(path).parent() {
         fs::create_dir_all(parent).unwrap(); 
     };
+}
+
+pub(crate) fn write_bytes_to_file(data: &Vec<u8>, file: &str) {
+    create_necessary_dir(&file);
+    let mut file = File::create(file).unwrap();
+    file.write_all(&data).unwrap();
 }
 
 fn write_map_to_file(map: &HashMap<u32, Vec<Vec<u8>>>, file: &str) {

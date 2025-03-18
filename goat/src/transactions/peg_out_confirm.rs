@@ -54,9 +54,9 @@ impl PreKickoffTransaction {
         self.tx.input[0].witness = witness
     }
 
-    pub fn tx_mut(&mut self) -> &mut Transaction {
-        &mut self.tx
-    }
+    pub fn tx(&self) -> &Transaction { &self.tx }
+
+    pub fn tx_mut(&mut self) -> &mut Transaction { &mut self.tx }
 }
 
 impl BaseTransaction for PreKickoffTransaction {
