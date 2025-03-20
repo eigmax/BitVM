@@ -14,10 +14,10 @@ use bitvm::chunk::api::type_conversion_utils::utils_raw_witnesses_from_signature
 use bitvm::chunk::api::{
     api_generate_full_tapscripts, api_generate_partial_script, 
     generate_signatures, generate_signatures_lit, validate_assertions, 
-    NUM_PUBS, NUM_U160, NUM_U256, PublicKeys as Groth16WotsPublicKeys,
+    NUM_PUBS, NUM_HASH, NUM_U256, PublicKeys as Groth16WotsPublicKeys,
 };
 use bitvm::signatures::{
-    wots_api::{wots256, wots160},
+    wots_api::{wots256, wots_hash},
     signing_winternitz::{
         WinternitzPublicKey, WinternitzSecret, LOG_D, WinternitzSigningInputs,
     },
@@ -1095,10 +1095,6 @@ pub(crate) fn handle_operator_sign_assert(conf: Config) {
     assert!(file_exists(&conf.general.operator_wots_pubkey_file), "operator wots public key not provided");
     let operator_wots_pubkeys = load_wots_pubkeys(&conf.general.operator_wots_pubkey_file);
     let (connector_e1_commitment_public_keys, connector_e2_commitment_public_keys) = split_pubkeys(&operator_wots_pubkeys.1);
-    let assert_commitment_public_keys = merge_to_connector_c_commits_public_key(
-        &connector_e1_commitment_public_keys,
-        &connector_e2_commitment_public_keys,
-    );
 
     println!("loading proof signatures ...");
     assert!(file_exists(&conf.general.proof_file), "proof-sigs not provided");
@@ -1282,8 +1278,8 @@ pub(crate) fn secrets_to_pubkeys(secrets: &WotsSecretKeys) -> WotsPublicKeys {
         fq_arr.push(p256);
     }
     let mut h_arr = vec![];
-    for i in 0..NUM_U160 {
-        let p160 = wots160::generate_public_key(&secrets.1[i+NUM_PUBS+NUM_U256]);
+    for i in 0..NUM_HASH {
+        let p160 = wots_hash::generate_public_key(&secrets.1[i+NUM_PUBS+NUM_U256]);
         h_arr.push(p160);
     }
     let g16_wotspubkey: Groth16WotsPublicKeys = (
@@ -1304,7 +1300,7 @@ pub(crate) fn secrets_to_pubkeys(secrets: &WotsSecretKeys) -> WotsPublicKeys {
 }
 pub(crate) fn seed_to_secrets(seed: &str) -> WotsSecretKeys {
     let seed_hash = sha256(seed);
-    let g16_wotsseckey = (0..NUM_PUBS+NUM_U256+NUM_U160)
+    let g16_wotsseckey = (0..NUM_PUBS+NUM_U256+NUM_HASH)
         .map(|idx| {
             let sec_i = sha256_with_id(&seed_hash, 1);
             let sec_i = sha256_with_id(&sec_i, idx);

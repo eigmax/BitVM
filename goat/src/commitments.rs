@@ -5,7 +5,7 @@ use strum::{Display, EnumIter, IntoEnumIterator};
 
 use bitvm::{
     chunk::api::{
-        PublicKeys as ApiPublicKeys, NUM_PUBS, NUM_U160, NUM_U256
+        PublicKeys as ApiPublicKeys, NUM_PUBS, NUM_HASH, NUM_U256
     }, 
     signatures::{signing_winternitz::{WinternitzPublicKey, WinternitzSecret, LOG_D}, winternitz::Parameters}
 };
@@ -99,7 +99,7 @@ impl CommitmentMessageId {
                 }
             );
         }
-        for i in 0..NUM_U160 {
+        for i in 0..NUM_HASH {
             commitment_map.insert(
                 CommitmentMessageId::Groth16IntermediateValues((format!("{}", i + NUM_PUBS + NUM_U256), 20)),
                 WinternitzPublicKey {
@@ -135,7 +135,7 @@ impl CommitmentMessageId {
                 WinternitzSecret::new(32),
             );
         }
-        for i in 0..NUM_U160 {
+        for i in 0..NUM_HASH {
             commitment_map.insert(
                 CommitmentMessageId::Groth16IntermediateValues((format!("{}", i + NUM_PUBS + NUM_U256), 20)),
                 WinternitzSecret::new(20),

@@ -1,6 +1,6 @@
 use bitvm::treepp::*;
-use bitvm::chunk::api::{Signatures as Groth16WotsSignatures, PublicKeys as Groth16WotsPublicKeys, NUM_PUBS, NUM_U160, NUM_U256};
-use bitvm::signatures::wots_api::{wots256, wots160};
+use bitvm::chunk::api::{Signatures as Groth16WotsSignatures, PublicKeys as Groth16WotsPublicKeys, NUM_PUBS, NUM_HASH, NUM_U256};
+use bitvm::signatures::wots_api::{wots256, wots_hash};
 use bitvm::signatures::signing_winternitz::{WinternitzPublicKey, WinternitzSecret};
 use ark_bn254::Bn254;
 use bitcoin::{ScriptBuf, Transaction, Txid, consensus, Wtxid};
@@ -12,7 +12,7 @@ use std::fs::{File, self};
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 
-const NUM_SIGS: usize = NUM_PUBS + NUM_U160 + NUM_U256;
+const NUM_SIGS: usize = NUM_PUBS + NUM_HASH + NUM_U256;
 pub type KickoffWotsSecretKeys = [WinternitzSecret; NUM_KICKOFF];
 pub type Groth16WotsSecretKeys = [String; NUM_SIGS];
 pub type WotsSecretKeys = (
@@ -83,7 +83,7 @@ pub fn write_signed_assertions_to_file(file: &str, sigs: Groth16WotsSignatures) 
 pub fn load_signed_assertions_from_file(file: &str) -> Groth16WotsSignatures {
     let sigs_map = read_map_from_file(file).expect(&format!("fail to open {:?}", file));
     const W256_LEN: u32 = wots256::N_DIGITS * 2;
-    const W160_LEN: u32 = wots160::N_DIGITS * 2;
+    const W160_LEN: u32 = wots_hash::N_DIGITS * 2;
 
     let mut psig = vec![];
     let (min, max) = (0, NUM_PUBS);
@@ -120,7 +120,7 @@ pub fn load_signed_assertions_from_file(file: &str) -> Groth16WotsSignatures {
     let fsig: [wots256::Signature; NUM_U256] = fsig.try_into().unwrap();
 
     let mut hsig = vec![];
-    let (min, max) = (max, max + NUM_U160);
+    let (min, max) = (max, max + NUM_HASH);
     for i in min..max {
         let v = sigs_map.get(&(i as u32)).unwrap();
         assert!(v.len() == W160_LEN as usize, "Invalid wots siganture length");
@@ -131,10 +131,10 @@ pub fn load_signed_assertions_from_file(file: &str) -> Groth16WotsSignatures {
                 v[(2*i) as usize].clone().try_into().unwrap(), 
                 v[(2*i+1) as usize][0]));
         }
-        let sig: wots160::Signature = res.try_into().unwrap();
+        let sig: wots_hash::Signature = res.try_into().unwrap();
         hsig.push(sig);
     }
-    let hsig: [wots160::Signature; NUM_U160] = hsig.try_into().unwrap();
+    let hsig: [wots_hash::Signature; NUM_HASH] = hsig.try_into().unwrap();
 
     let res = (Box::new(psig), Box::new(fsig), Box::new(hsig));
     res
@@ -213,7 +213,7 @@ pub fn write_wots_pubkeys(file: &str, pubkeys: WotsPublicKeys) {
 pub fn load_wots_pubkeys(file: &str) -> WotsPublicKeys {
     let pubkeys_map = read_map_from_file(file).expect(&format!("fail to open {:?}", file));
     const W256_LEN: u32 = wots256::N_DIGITS;
-    const W160_LEN: u32 = wots160::N_DIGITS;
+    const W160_LEN: u32 = wots_hash::N_DIGITS;
 
     let mut pk0 = vec![];
     let (min, max) = (0, NUM_PUBS);
@@ -244,7 +244,7 @@ pub fn load_wots_pubkeys(file: &str) -> WotsPublicKeys {
     let pk1: [wots256::PublicKey; NUM_U256] = pk1.try_into().unwrap();
 
     let mut pk2 = vec![];
-    let (min, max) = (max, max + NUM_U160);
+    let (min, max) = (max, max + NUM_HASH);
     for i in min..max {
         let v = pubkeys_map.get(&(i as u32)).unwrap();
         assert!(v.len() == W160_LEN as usize, "Invalid wots public-key length");
@@ -252,10 +252,10 @@ pub fn load_wots_pubkeys(file: &str) -> WotsPublicKeys {
         for i in 0..W160_LEN {
             res.push(v[i as usize].clone().try_into().unwrap());
         }
-        let sig: wots160::PublicKey = res.try_into().unwrap();
+        let sig: wots_hash::PublicKey = res.try_into().unwrap();
         pk2.push(sig);
     }
-    let pk2: [wots160::PublicKey; NUM_U160] = pk2.try_into().unwrap();
+    let pk2: [wots_hash::PublicKey; NUM_HASH] = pk2.try_into().unwrap();
 
     let mut pk_kickoff: Vec<WinternitzPublicKey> = vec![];
     let (min, max) = (max, max + NUM_KICKOFF);
