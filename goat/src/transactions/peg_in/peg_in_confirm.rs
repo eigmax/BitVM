@@ -167,7 +167,7 @@ impl PegInConfirmTransaction {
     fn push_verifier_signature_input_0(
         &mut self,
         context: &VerifierContext,
-        connector_z: &ConnectorZ,
+        _connector_z: &ConnectorZ,
         secret_nonce: &SecNonce,
     ) {
         let input_index = 0;
@@ -180,9 +180,9 @@ impl PegInConfirmTransaction {
         );
 
         // TODO: Consider verifying the final signature against the n-of-n public key and the tx.
-        if self.musig2_signatures[&input_index].len() == context.n_of_n_public_keys.len() {
-            self.finalize_input_0(context, connector_z);
-        }
+        // if self.musig2_signatures[&input_index].len() == context.n_of_n_public_keys.len() {
+        //     self.finalize_input_0(context, connector_z);
+        // }
     }
 
     fn finalize_input_0(&mut self, context: &dyn BaseContext, connector_z: &ConnectorZ) {
@@ -204,6 +204,18 @@ impl PegInConfirmTransaction {
     ) {
         let input_index = 0;
         self.push_verifier_signature_input_0(context, connector_z, &secret_nonces[&input_index]);
+    }
+
+    pub fn try_finalize_input_0(
+        &mut self, 
+        context: &dyn BaseContext, 
+        connector_z: &ConnectorZ, 
+        depositor_signature: bitcoin::taproot::Signature
+    ) {
+        let input_index = 0;
+        assert!(self.has_all_signatures(), "pre-sign not finished");
+        self.push_depositor_signature_input(input_index, depositor_signature);
+        self.finalize_input_0(context, connector_z);
     }
 
     pub fn merge(&mut self, peg_in_confirm: &PegInConfirmTransaction) {

@@ -186,7 +186,7 @@ impl Take1Transaction {
         );
     }
 
-    fn sign_input_1(&mut self, context: &OperatorContext, connector_a: &ConnectorA) {
+    pub fn sign_input_1(&mut self, context: &OperatorContext, connector_a: &ConnectorA) {
         let input_index = 1;
         pre_sign_taproot_input_default(
             self,
@@ -197,7 +197,7 @@ impl Take1Transaction {
         );
     }
 
-    fn sign_input_2(&mut self, context: &OperatorContext) {
+    pub fn sign_input_2(&mut self, context: &OperatorContext) {
         let input_index = 2;
         pre_sign_p2wsh_input(
             self,

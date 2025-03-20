@@ -200,7 +200,7 @@ impl AssertFinalTransaction {
         }
     }
 
-    fn sign_commit_inputs(&mut self, context: &OperatorContext) {
+    pub fn sign_commit_inputs(&mut self, context: &OperatorContext) {
         let input_indexes = [1, 2];
         for input_index in input_indexes {
             pre_sign_p2wsh_input(

@@ -3,13 +3,14 @@ use bitvm::chunk::api::{Signatures as Groth16WotsSignatures, PublicKeys as Groth
 use bitvm::signatures::wots_api::{wots256, wots160};
 use bitvm::signatures::signing_winternitz::{WinternitzPublicKey, WinternitzSecret};
 use ark_bn254::Bn254;
-use bitcoin::ScriptBuf;
+use bitcoin::{ScriptBuf, Transaction, Txid, consensus, Wtxid};
 use goat_bridge::proof::{deserialize_proof, deserialize_vk, deserialize_pubin};
 use goat_bridge::commitments::NUM_KICKOFF;
 use std::collections::HashMap;
 use std::io::{Write, BufReader};
 use std::fs::{File, self};
 use std::path::Path;
+use serde::{Serialize, Deserialize};
 
 const NUM_SIGS: usize = NUM_PUBS + NUM_U160 + NUM_U256;
 pub type KickoffWotsSecretKeys = [WinternitzSecret; NUM_KICKOFF];
@@ -24,6 +25,28 @@ pub type WotsPublicKeys = (
     KickoffWotsPublicKeys,
     Groth16WotsPublicKeys,
 );
+
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub struct SignedTransaction {
+    #[serde(with = "consensus::serde::With::<consensus::serde::Hex>")]
+    txid: Txid,
+    #[serde(with = "consensus::serde::With::<consensus::serde::Hex>")]
+    wtxid: Wtxid,
+    #[serde(with = "consensus::serde::With::<consensus::serde::Hex>")]
+    tx: Transaction,
+}
+
+impl SignedTransaction {
+    pub fn new(tx: Transaction) -> Self {
+        SignedTransaction {
+            txid: tx.compute_txid(),
+            wtxid: tx.compute_wtxid(),
+            tx,
+        }
+    }
+}
+
 
 pub fn write_signed_assertions_to_file(file: &str, sigs: Groth16WotsSignatures) { 
     let mut sigs_map: HashMap<u32, Vec<Vec<u8>>> = HashMap::new();

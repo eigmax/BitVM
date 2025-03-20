@@ -132,7 +132,7 @@ impl AssertInitialTransaction {
         }
     }
 
-    fn sign_input_0(&mut self, context: &OperatorContext, connector_b: &ConnectorB) {
+    pub fn sign_input_0(&mut self, context: &OperatorContext, connector_b: &ConnectorB) {
         let input_index = 0;
         pre_sign_taproot_input_default(
             self,

@@ -76,6 +76,7 @@ async fn main() {
             let conf = load_config(&cli.config_file);
             handle_operator_presign(conf);
         },
+        
         _ => {}
     }
 }

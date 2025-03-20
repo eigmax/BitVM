@@ -15,6 +15,7 @@ pub const DEFAULT_SIGNED_ASSERTION_FILE: &str = "data/public/signed_assertions.j
 pub const DFFAULT_DISPROVE_WITNESS_FILE: &str = "data/public/disprove_witness.json";
 
 pub const DEFAULT_TXNS_DIR: &str = "data/public/txns/";
+pub const DEFAULT_SIGNED_TXNS_DIR: &str = "data/public/signed_txns/";
 pub const PEGIN_DEPOSIT_FILE_NAME: &str = "pegin-deposit.json";
 pub const PEGIN_REFUND_FILE_NAME: &str = "pegin-refund.json";
 pub const PEGIN_CONFIRM_FILE_NAME: &str = "pegin-confirm.json";
@@ -56,6 +57,8 @@ pub struct GeneralConfig {
 
     #[serde(default = "default_txns_dir")]
     pub txns_dir: String,
+    #[serde(default = "default_signed_txns_dir")]
+    pub signed_txns_dir: String,
 
     #[serde(default = "default_operator_wots_pubkey_file")]
     pub operator_wots_pubkey_file: String,
@@ -79,7 +82,7 @@ pub struct GeneralConfig {
 pub struct DepositorConfig {    
     pub depositor_evm_address: Option<String>,
     // pub depositor_taproot_public_key: Option<String>,
-    pub depositor_public_key: Option<String>,
+    pub depositor_pubkey: Option<String>,
     pub depositor_seckey: Option<String>,  
 }
 
@@ -115,6 +118,7 @@ impl Default for GeneralConfig {
             operator_pubkey: None,
             // operator_taproot_pubkey: None,
             txns_dir: default_txns_dir(),
+            signed_txns_dir: default_signed_txns_dir(),
             operator_wots_pubkey_file: default_operator_wots_pubkey_file(),
             vkey_file: default_vkey_file(),
             proof_file: default_proof_file(),
@@ -165,6 +169,9 @@ fn default_network() -> String {
 }
 fn default_txns_dir() -> String {
     DEFAULT_TXNS_DIR.to_string()
+}
+fn default_signed_txns_dir() -> String {
+    DEFAULT_SIGNED_TXNS_DIR.to_string()
 }
 fn default_operator_wots_secret_file() -> String {
     DEFAULT_WOTS_SECRET_FILE.to_string()

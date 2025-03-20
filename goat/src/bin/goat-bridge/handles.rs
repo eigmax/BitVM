@@ -7,14 +7,10 @@ use crate::config::{
     TAKE2_FILE_NAME, DISPROVE_FILE_NAME,
 };
 use crate::files::{
-    file_exists, load_groth16_proof, load_groth16_pubin, 
-    load_groth16_vk, load_scripts_from_file, load_signed_assertions_from_file, 
-    load_wots_pubkeys, load_wots_seckeys, write_disprove_witness, 
-    write_scripts_to_file, write_signed_assertions_to_file, 
-    write_wots_pubkeys, write_wots_seckeys, write_bytes_to_file, 
-    load_scripts_bytes_from_file, 
+    file_exists, load_groth16_proof, load_groth16_pubin, load_groth16_vk, load_scripts_bytes_from_file, load_scripts_from_file, load_signed_assertions_from_file, load_wots_pubkeys, load_wots_seckeys, write_bytes_to_file, write_disprove_witness, write_scripts_to_file, write_signed_assertions_to_file, write_wots_pubkeys, write_wots_seckeys 
 };
-use crate::files::{WotsSecretKeys, WotsPublicKeys};
+use crate::files::{WotsSecretKeys, WotsPublicKeys, SignedTransaction};
+use bitvm::chunk::api::type_conversion_utils::utils_raw_witnesses_from_signatures;
 use bitvm::chunk::api::{
     api_generate_full_tapscripts, api_generate_partial_script, 
     generate_signatures, generate_signatures_lit, validate_assertions, 
@@ -22,13 +18,19 @@ use bitvm::chunk::api::{
 };
 use bitvm::signatures::{
     wots_api::{wots256, wots160},
-    signing_winternitz::{WinternitzPublicKey, WinternitzSecret, LOG_D},
-    winternitz::Parameters,
+    signing_winternitz::{
+        WinternitzPublicKey, WinternitzSecret, LOG_D, WinternitzSigningInputs,
+    },
+    winternitz::Parameters, 
 };
 use goat_bridge::commitments::{NUM_KICKOFF, KICKOFF_MSG_SIZE, CommitmentMessageId};
+use goat_bridge::contexts::depositor::DepositorContext;
 use goat_bridge::contexts::operator::OperatorContext;
+use goat_bridge::transactions::assert::utils::MAX_CONNECTORS_E_PER_TX;
+use goat_bridge::transactions::base::BaseTransaction;
 use goat_bridge::transactions::{
     base::{Input, CROWDFUNDING_AMOUNT}, 
+    signing::generate_taproot_leaf_schnorr_signature,
     pre_signed::PreSignedTransaction,
     pre_signed_musig2::PreSignedMusig2Transaction,
     peg_in::{
@@ -72,7 +74,7 @@ use goat_bridge::contexts::{
 };
 use sha2::{Sha256, Digest};
 use bitcoin::{
-    Amount, OutPoint, PublicKey, Sequence, Witness, XOnlyPublicKey 
+    Amount, OutPoint, PublicKey, Sequence, TapSighashType, Witness, XOnlyPublicKey
 };
 use musig2::SecNonce;
 use std::collections::HashMap;
@@ -124,15 +126,15 @@ pub(crate) fn handle_sign_proof(conf: Config, skip_validation: bool) {
     let ark_vkey = load_groth16_vk(&conf.general.vkey_file);
 
     println!("\nloading groth16 proof ...");
-    assert!(file_exists(&conf.general.vkey_file), "proof not provided");
+    assert!(file_exists(&conf.general.proof_file), "proof not provided");
     let ark_proof = load_groth16_proof(&conf.general.proof_file);
 
     println!("\nloading public-inputs ...");
-    assert!(file_exists(&conf.general.vkey_file), "public-inputs not provided");
+    assert!(file_exists(&conf.general.pubin_file), "public-inputs not provided");
     let ark_pubin = load_groth16_pubin(&conf.general.pubin_file);
 
     println!("\nloading operator wots secret keys ...");
-    assert!(file_exists(&conf.general.vkey_file), "public-inputs not provided");
+    assert!(file_exists(&conf.operator.operator_wots_seckey_file), "operator_wots_seckey_file not provided");
     let wots_sec = load_wots_seckeys(&conf.operator.operator_wots_seckey_file);
 
     let proof_sigs = if skip_validation {
@@ -150,7 +152,7 @@ pub(crate) fn handle_verify_proof(conf: Config) {
     let ark_vkey = load_groth16_vk(&conf.general.vkey_file);
 
     println!("\nloading proof signatures ...");
-    assert!(file_exists(&conf.general.vkey_file), "proof-sigs not provided");
+    assert!(file_exists(&conf.general.proof_file), "proof-sigs not provided");
     let proof_sigs = load_signed_assertions_from_file(&conf.general.signed_assertions_file);
     
     println!("\nloading operator wots public-key...");
@@ -182,19 +184,21 @@ pub(crate) fn handle_generate_pegin_txns(conf: Config, input_oupoint: OutPoint, 
 
     let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
     let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
-        .map(|str| PublicKey::from_str(&str).expect("invalid depositor_public_key {str}"))
+        .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
         .collect();
 
-    let depositor_public_key = &conf.depositor.depositor_public_key.expect("depositor_public_key is not provided in the configuration file");
-    let depositor_public_key = PublicKey::from_str(depositor_public_key).expect("invalid depositor_public_key");
-    let depositor_taproot_public_key = XOnlyPublicKey::from(depositor_public_key);
+    let depositor_pubkey = &conf.depositor.depositor_pubkey.expect("depositor_pubkey is not provided in the configuration file");
+    let depositor_pubkey = PublicKey::from_str(depositor_pubkey).expect("invalid depositor_pubkey");
+    let depositor_taproot_public_key = XOnlyPublicKey::from(depositor_pubkey);
+
+    let depositor_evm_address = conf.depositor.depositor_evm_address.expect("depositor_evm_address is not provided in the configuration file");
 
     let (_,aggregated_federation_taproot_pubkey) = generate_n_of_n_public_key(&federation_pubkeys);
     assert_eq!(aggregated_federation_taproot_pubkey, federation_taproot_pubkey, "federation_taproot_pubkey is not aggregated from federation_pubkeys");
 
     let connector_z = ConnectorZ::new(
         network,
-        &conf.depositor.depositor_evm_address.expect("depositor_evm_address is not provided in the configuration file"),
+        &depositor_evm_address,
         &depositor_taproot_public_key,
         &federation_taproot_pubkey,
     );
@@ -226,7 +230,7 @@ pub(crate) fn handle_generate_pegin_txns(conf: Config, input_oupoint: OutPoint, 
     };
     let pegin_refund_tx = PegInRefundTransaction::new_for_validation(
         network, 
-        &depositor_public_key, 
+        &depositor_pubkey, 
         &connector_z, 
         refund_input,
     );
@@ -309,14 +313,14 @@ pub(crate) fn handle_generate_bitvm_instance(conf: Config) {
         
     // let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
     // let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
-    //     .map(|str| PublicKey::from_str(&str).expect("invalid depositor_public_key {str}"))
+    //     .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
     //     .collect();
 
     let operator_pubkey = &conf.general.operator_pubkey.expect("operator_pubkey is not provided in the configuration file");
     let operator_pubkey = PublicKey::from_str(operator_pubkey).expect("invalid operator_pubkey");
     let operator_taproot_pubkey = XOnlyPublicKey::from(operator_pubkey);
 
-    println!("\nloading pegin-confirm-tx...");
+    println!("loading pegin-confirm-tx...");
     let pegin_confirm_file = format!("{}{}", &conf.general.txns_dir, PEGIN_CONFIRM_FILE_NAME);
     assert!(file_exists(&pegin_confirm_file), "pegin-confirm tx not provided");
     let file = File::open(pegin_confirm_file.clone()).expect(&format!("fail to open {:?}", pegin_confirm_file));
@@ -324,7 +328,7 @@ pub(crate) fn handle_generate_bitvm_instance(conf: Config) {
     let pegin_confirm_tx: PegInConfirmTransaction = serde_json::from_reader(reader).unwrap();
     let pegin_confirm_txid = pegin_confirm_tx.tx().compute_txid();
 
-    println!("\nloading pre-kickoff-tx...");
+    println!("loading pre-kickoff-tx...");
     let pre_kickoff_file = format!("{}{}", &conf.general.txns_dir, PRE_KICKOFF_FILE_NAME);
     assert!(file_exists(&pre_kickoff_file), "pre-kickoff tx not provided");
     let file = File::open(pre_kickoff_file.clone()).expect(&format!("fail to open {:?}", pre_kickoff_file));
@@ -332,7 +336,7 @@ pub(crate) fn handle_generate_bitvm_instance(conf: Config) {
     let pre_kickoff_tx: PreKickoffTransaction = serde_json::from_reader(reader).unwrap();
     let pre_kickoff_txid = pre_kickoff_tx.tx().compute_txid();
 
-    println!("\nloading operator wots public-keys...");
+    println!("loading operator wots public-keys...");
     assert!(file_exists(&conf.general.operator_wots_pubkey_file), "operator wots public key not provided");
     let operator_wots_pubkeys = load_wots_pubkeys(&conf.general.operator_wots_pubkey_file);
     let kickoff_wots_commitment_keys = CommitmentMessageId::pubkey_map_for_kickoff(&operator_wots_pubkeys.0);
@@ -342,7 +346,7 @@ pub(crate) fn handle_generate_bitvm_instance(conf: Config) {
         &connector_e2_commitment_public_keys,
     );
 
-    println!("\nloading disprove scripts...");
+    println!("loading disprove scripts...");
     assert!(file_exists(&conf.general.disprove_scripts_file), "disprove scripts not provided");
     let disprove_scripts_bytes = load_scripts_bytes_from_file(&conf.general.disprove_scripts_file);
 
@@ -707,9 +711,11 @@ pub(crate) fn handle_federation_presign(conf: Config) {
     let federation_taproot_pubkey = &conf.general.federation_taproot_pubkey.expect("federation_taproot_pubkey is not provided in the configuration file");
     let federation_taproot_pubkey = XOnlyPublicKey::from_str(federation_taproot_pubkey).expect("invalid federation_taproot_pubkey");
       
-    let depositor_public_key = &conf.depositor.depositor_public_key.expect("depositor_public_key is not provided in the configuration file");
-    let depositor_public_key = PublicKey::from_str(depositor_public_key).expect("invalid depositor_public_key");
-    let depositor_taproot_public_key = XOnlyPublicKey::from(depositor_public_key);
+    let depositor_pubkey = &conf.depositor.depositor_pubkey.expect("depositor_pubkey is not provided in the configuration file");
+    let depositor_pubkey = PublicKey::from_str(depositor_pubkey).expect("invalid depositor_pubkey");
+    let depositor_taproot_public_key = XOnlyPublicKey::from(depositor_pubkey);
+
+    let depositor_evm_address = conf.depositor.depositor_evm_address.expect("depositor_evm_address is not provided in the configuration file");
 
     let federation_seckeys = &conf.federation.federation_seckeys.expect("federation_seckeys not provided");
     let federation_pubkeys: Vec<PublicKey> = federation_seckeys.iter()
@@ -735,14 +741,14 @@ pub(crate) fn handle_federation_presign(conf: Config) {
         let file = File::open(pegin_confirm_file.clone()).expect(&format!("fail to open {:?}", pegin_confirm_file));
         let reader = BufReader::new(file);
         let mut pegin_confirm_tx: PegInConfirmTransaction = serde_json::from_reader(reader).unwrap();
-        if pegin_confirm_tx.musig2_signatures().len() != 0 {
+        if pegin_confirm_tx.has_all_signatures() {
             println!("pegin-confirm already pre-signed");
             break 'pegin_confirm;
         }
         println!("pre-signing pegin-confirm-tx...");
         let connector_z = ConnectorZ::new(
             network,
-            &conf.depositor.depositor_evm_address.expect("depositor_evm_address is not provided in the configuration file"),
+            &depositor_evm_address,
             &depositor_taproot_public_key,
             &federation_taproot_pubkey,
         );
@@ -856,7 +862,7 @@ pub(crate) fn handle_operator_presign(conf: Config) {
         
     let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
     let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
-        .map(|str| PublicKey::from_str(&str).expect("invalid depositor_public_key {str}"))
+        .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
         .collect();
 
     let operator_seckey = &conf.operator.operator_seckey.expect("operator_seckey not provided");
@@ -890,6 +896,379 @@ pub(crate) fn handle_operator_presign(conf: Config) {
         write_bytes_to_file(&challenge_tx_bytes, &challenge_file);
         println!("challenge_tx was written to {}", challenge_file);
     }
+}
+
+pub(crate) fn handle_depositor_sign_pegin_confirm(conf: Config) {
+    println!("\nloading config...");
+    let network = match_network(&conf.general.network).unwrap();
+ 
+    let federation_taproot_pubkey = &conf.general.federation_taproot_pubkey.expect("federation_taproot_pubkey is not provided in the configuration file");
+    let federation_taproot_pubkey = XOnlyPublicKey::from_str(federation_taproot_pubkey).expect("invalid federation_taproot_pubkey");
+      
+    let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
+    let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
+        .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
+        .collect();
+
+    let depositor_seckey = conf.depositor.depositor_seckey.expect("depositor_seckey not provided");
+    let depositor_pubkey = conf.depositor.depositor_pubkey.expect("depositor_pubkey not provided");
+    let depositor_pubkey = PublicKey::from_str(&depositor_pubkey).expect("invalid depositor_pubkey");
+    let depositor_context = DepositorContext::new(
+        network, 
+        &depositor_seckey, 
+        &federation_pubkeys,
+    );
+    let depositor_taproot_public_key = XOnlyPublicKey::from(depositor_context.depositor_public_key);
+    assert_eq!(depositor_context.depositor_public_key, depositor_pubkey, "depositor_seckey & depositor_pubkey not match");
+    assert_eq!(federation_taproot_pubkey, depositor_context.n_of_n_taproot_public_key, "federation_taproot_pubkey is not aggregated from federation_pubkeys");
+
+    let depositor_evm_address = &conf.depositor.depositor_evm_address.expect("depositor_evm_address is not provided in the configuration file");
+
+    println!("loading pegin-confirm-tx...");
+    let pegin_confirm_file = format!("{}{}", &conf.general.txns_dir, PEGIN_CONFIRM_FILE_NAME);
+    assert!(file_exists(&pegin_confirm_file), "pegin-confirm tx not provided");
+    let file = File::open(pegin_confirm_file.clone()).expect(&format!("fail to open {:?}", pegin_confirm_file));
+    let reader = BufReader::new(file);
+    let mut pegin_confirm_tx: PegInConfirmTransaction = serde_json::from_reader(reader).unwrap();
+    assert!(pegin_confirm_tx.musig2_signatures().len() != 0, "pegin_confirm_tx not presigned");
+
+    println!("signing pegin-confirm-tx...");
+    let connector_z = ConnectorZ::new(
+        network,
+        &depositor_evm_address,
+        &depositor_taproot_public_key,
+        &federation_taproot_pubkey,
+    );
+    let signing_input_index = 0;
+    let prev_outs = pegin_confirm_tx.prev_outs().clone();
+    let use_script = pegin_confirm_tx.prev_scripts()[signing_input_index].clone();
+    let depositor_signature = generate_taproot_leaf_schnorr_signature(
+        pegin_confirm_tx.tx_mut(), 
+        &prev_outs, 
+        signing_input_index, 
+        TapSighashType::All, 
+        &use_script, 
+        &depositor_context.depositor_keypair,
+    );
+    pegin_confirm_tx.try_finalize_input_0(
+        &depositor_context, 
+        &connector_z, 
+        depositor_signature,
+    );
+
+    let signed_pegin_confirm_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(pegin_confirm_tx.finalize())).unwrap();
+    let signed_pegin_confirm_tx_file = format!("{}{}", &conf.general.signed_txns_dir, PEGIN_CONFIRM_FILE_NAME);
+    write_bytes_to_file(&signed_pegin_confirm_tx_bytes, &signed_pegin_confirm_tx_file);
+    println!("signed pegin_confirm_tx written to {}", signed_pegin_confirm_tx_file)
+}
+
+pub(crate) fn handle_operator_sign_kickoff(conf: Config, evm_txid: &str) {
+    println!("\nloading config...");
+    let network = match_network(&conf.general.network).unwrap();
+
+    let federation_taproot_pubkey = &conf.general.federation_taproot_pubkey.expect("federation_taproot_pubkey is not provided in the configuration file");
+    let federation_taproot_pubkey = XOnlyPublicKey::from_str(federation_taproot_pubkey).expect("invalid federation_taproot_pubkey");
+        
+    let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
+    let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
+        .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
+        .collect();
+
+    let operator_seckey = &conf.operator.operator_seckey.expect("operator_seckey not provided");
+    let operator_pubkey = &conf.general.operator_pubkey.expect("operator_pubkey is not provided in the configuration file");
+    let operator_pubkey = PublicKey::from_str(operator_pubkey).expect("invalid operator_pubkey");
+    let operator_taproot_pubkey = XOnlyPublicKey::from(operator_pubkey);
+    let (_,pubkey_from_sec) = generate_keys_from_secret(network, operator_seckey);
+    assert_eq!(pubkey_from_sec, operator_pubkey, "operatot_seckey & operator_pubkey not match");
+    let operator_context = OperatorContext::new(network, operator_seckey, &federation_pubkeys);
+    assert_eq!(operator_context.n_of_n_taproot_public_key, federation_taproot_pubkey, "federation_taproot_pubkey not aggregated from federation_pubkeys");
+
+    println!("loading operator wots public-keys...");
+    assert!(file_exists(&conf.general.operator_wots_pubkey_file), "operator wots public key not provided");
+    let operator_wots_pubkeys = load_wots_pubkeys(&conf.general.operator_wots_pubkey_file);
+    let kickoff_wots_commitment_keys = CommitmentMessageId::pubkey_map_for_kickoff(&operator_wots_pubkeys.0);
+
+    println!("loading operator wots secret keys ...");
+    assert!(file_exists(&conf.operator.operator_wots_seckey_file), "operator_wots_seckey_file not provided");
+    let wots_sec = load_wots_seckeys(&conf.operator.operator_wots_seckey_file);
+
+    println!("loading kickoff-tx...");
+    let kickoff_file = format!("{}{}", &conf.general.txns_dir, KICKOFF_FILE_NAME);
+    assert!(file_exists(&kickoff_file), "kickoff tx not provided");
+    let file = File::open(kickoff_file.clone()).expect(&format!("fail to open {:?}", kickoff_file));
+    let reader = BufReader::new(file);
+    let mut kickoff_tx: KickOffTransaction = serde_json::from_reader(reader).unwrap();
+
+    println!("signing kickoff-tx...");
+    let connector_6 = Connector6::new(
+        network,
+        &operator_taproot_pubkey,
+        &kickoff_wots_commitment_keys,
+    );
+    let evm_txid_inputs = WinternitzSigningInputs {
+        message: evm_txid.as_bytes(),
+        signing_key: &wots_sec.0[0],
+    };
+    kickoff_tx.sign(
+        &operator_context, 
+        &connector_6, 
+        &evm_txid_inputs,
+    );
+
+    let signed_kickoff_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(kickoff_tx.finalize())).unwrap();
+    let signed_kickoff_tx_file = format!("{}{}", &conf.general.signed_txns_dir, KICKOFF_FILE_NAME);
+    write_bytes_to_file(&signed_kickoff_tx_bytes, &signed_kickoff_tx_file);
+    println!("signed kickoff_tx written to {}", signed_kickoff_tx_file)
+}
+
+pub(crate) fn handle_operator_sign_take1(conf: Config) {
+    println!("\nloading config...");
+    let network = match_network(&conf.general.network).unwrap();
+
+    let federation_taproot_pubkey = &conf.general.federation_taproot_pubkey.expect("federation_taproot_pubkey is not provided in the configuration file");
+    let federation_taproot_pubkey = XOnlyPublicKey::from_str(federation_taproot_pubkey).expect("invalid federation_taproot_pubkey");
+        
+    let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
+    let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
+        .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
+        .collect();
+
+    let operator_seckey = &conf.operator.operator_seckey.expect("operator_seckey not provided");
+    let operator_pubkey = &conf.general.operator_pubkey.expect("operator_pubkey is not provided in the configuration file");
+    let operator_pubkey = PublicKey::from_str(operator_pubkey).expect("invalid operator_pubkey");
+    let operator_taproot_pubkey = XOnlyPublicKey::from(operator_pubkey);
+    let (_,pubkey_from_sec) = generate_keys_from_secret(network, operator_seckey);
+    assert_eq!(pubkey_from_sec, operator_pubkey, "operatot_seckey & operator_pubkey not match");
+    let operator_context = OperatorContext::new(network, operator_seckey, &federation_pubkeys);
+    assert_eq!(operator_context.n_of_n_taproot_public_key, federation_taproot_pubkey, "federation_taproot_pubkey not aggregated from federation_pubkeys");
+
+    println!("loading take1-tx...");
+    let take1_file = format!("{}{}", &conf.general.txns_dir, TAKE1_FILE_NAME);
+    assert!(file_exists(&take1_file), "take-1 tx not provided");
+    let file = File::open(take1_file.clone()).expect(&format!("fail to open {:?}", take1_file));
+    let reader = BufReader::new(file);
+    let mut take1_tx: Take1Transaction = serde_json::from_reader(reader).unwrap();
+    assert!(take1_tx.tx().input[0].witness != Witness::default(), "take_1 not presigned");
+
+    println!("signing take1-tx...");
+    let connector_a = ConnectorA::new(
+        network,
+        &operator_taproot_pubkey,
+        &federation_taproot_pubkey,
+    );
+    take1_tx.sign_input_1(
+        &operator_context, 
+        &connector_a,
+    );
+    take1_tx.sign_input_2(
+        &operator_context,
+    );
+
+    let signed_take1_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(take1_tx.finalize())).unwrap();
+    let signed_take1_tx_file = format!("{}{}", &conf.general.signed_txns_dir, TAKE1_FILE_NAME);
+    write_bytes_to_file(&signed_take1_tx_bytes, &signed_take1_tx_file);
+    println!("take1_tx was written to {}", signed_take1_tx_file);
+}
+
+pub(crate) fn handle_operator_sign_assert(conf: Config) {
+    println!("\nloading config...");
+    let network = match_network(&conf.general.network).unwrap();
+
+    let federation_taproot_pubkey = &conf.general.federation_taproot_pubkey.expect("federation_taproot_pubkey is not provided in the configuration file");
+    let federation_taproot_pubkey = XOnlyPublicKey::from_str(federation_taproot_pubkey).expect("invalid federation_taproot_pubkey");
+        
+    let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
+    let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
+        .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
+        .collect();
+
+    let operator_seckey = &conf.operator.operator_seckey.expect("operator_seckey not provided");
+    let operator_pubkey = &conf.general.operator_pubkey.expect("operator_pubkey is not provided in the configuration file");
+    let operator_pubkey = PublicKey::from_str(operator_pubkey).expect("invalid operator_pubkey");
+    let operator_taproot_pubkey = XOnlyPublicKey::from(operator_pubkey);
+    let (_,pubkey_from_sec) = generate_keys_from_secret(network, operator_seckey);
+    assert_eq!(pubkey_from_sec, operator_pubkey, "operatot_seckey & operator_pubkey not match");
+    let operator_context = OperatorContext::new(network, operator_seckey, &federation_pubkeys);
+    assert_eq!(operator_context.n_of_n_taproot_public_key, federation_taproot_pubkey, "federation_taproot_pubkey not aggregated from federation_pubkeys");
+
+    println!("loading operator wots public-keys...");
+    assert!(file_exists(&conf.general.operator_wots_pubkey_file), "operator wots public key not provided");
+    let operator_wots_pubkeys = load_wots_pubkeys(&conf.general.operator_wots_pubkey_file);
+    let (connector_e1_commitment_public_keys, connector_e2_commitment_public_keys) = split_pubkeys(&operator_wots_pubkeys.1);
+    let assert_commitment_public_keys = merge_to_connector_c_commits_public_key(
+        &connector_e1_commitment_public_keys,
+        &connector_e2_commitment_public_keys,
+    );
+
+    println!("loading proof signatures ...");
+    assert!(file_exists(&conf.general.proof_file), "proof-sigs not provided");
+    let proof_sigs = load_signed_assertions_from_file(&conf.general.signed_assertions_file);
+    let assert_commit_witness = utils_raw_witnesses_from_signatures(&proof_sigs);
+    let assert_commit1_witness = assert_commit_witness[0..MAX_CONNECTORS_E_PER_TX].to_vec();
+    let assert_commit2_witness = assert_commit_witness[MAX_CONNECTORS_E_PER_TX..].to_vec();
+
+    {   // assert-inital
+        println!("\nloading assert-inital-tx...");
+        let assert_init_file = format!("{}{}", &conf.general.txns_dir, ASSERT_INIT_FILE_NAME);
+        assert!(file_exists(&assert_init_file), "assert_init_file tx not provided");
+        let file = File::open(assert_init_file.clone()).expect(&format!("fail to open {:?}", assert_init_file));
+        let reader = BufReader::new(file);
+        let mut assert_init_tx: AssertInitialTransaction = serde_json::from_reader(reader).unwrap();
+        println!("signing assert-inital-tx...");
+        let connector_b = ConnectorB::new(
+            network,
+            &operator_taproot_pubkey,
+        );
+        assert_init_tx.sign_input_0(
+            &operator_context, 
+            &connector_b,
+        );
+    
+        let signed_assert_init_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(assert_init_tx.finalize())).unwrap();
+        let signed_assert_init_tx_file = format!("{}{}", &conf.general.signed_txns_dir, ASSERT_INIT_FILE_NAME);
+        write_bytes_to_file(&signed_assert_init_tx_bytes, &signed_assert_init_tx_file);
+        println!("assert_init_tx was written to {}", signed_assert_init_tx_file);
+    }
+
+    {   // assert-commit1
+        println!("\nloading assert-commit1-tx...");
+        let assert_commit1_file = format!("{}{}", &conf.general.txns_dir, ASSERT_COMMIT_1_FILE_NAME);
+        assert!(file_exists(&assert_commit1_file), "assert_commit1_file tx not provided");
+        let file = File::open(assert_commit1_file.clone()).expect(&format!("fail to open {:?}", assert_commit1_file));
+        let reader = BufReader::new(file);
+        let mut assert_commit1_tx: AssertCommit1Transaction = serde_json::from_reader(reader).unwrap();
+        println!("signing assert-commit1-tx...");
+        let assert_commit1_connectors_e = AssertCommit1ConnectorsE {
+            connectors_e: connector_e1_commitment_public_keys
+                .iter()
+                .map(|x| {
+                    ConnectorE::new(
+                        network,
+                        &operator_pubkey,
+                        x,
+                    )
+                })
+                .collect(),
+        };
+        assert_commit1_tx.sign(
+            &assert_commit1_connectors_e, 
+            assert_commit1_witness,
+        );
+        let signed_assert_commit1_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(assert_commit1_tx.finalize())).unwrap();
+        let signed_assert_commit1_tx_file = format!("{}{}", &conf.general.signed_txns_dir, ASSERT_COMMIT_1_FILE_NAME);
+        write_bytes_to_file(&signed_assert_commit1_tx_bytes, &signed_assert_commit1_tx_file);
+        println!("assert_commit1_tx was written to {}", signed_assert_commit1_tx_file);
+    }
+
+    {   // assert-commit2
+        println!("\nloading assert-commit2-tx...");
+        let assert_commit2_file = format!("{}{}", &conf.general.txns_dir, ASSERT_COMMIT_2_FILE_NAME);
+        assert!(file_exists(&assert_commit2_file), "assert_commit2_file tx not provided");
+        let file = File::open(assert_commit2_file.clone()).expect(&format!("fail to open {:?}", assert_commit2_file));
+        let reader = BufReader::new(file);
+        let mut assert_commit2_tx: AssertCommit2Transaction = serde_json::from_reader(reader).unwrap();
+        println!("signing assert-commit2-tx...");
+        let assert_commit2_connectors_e = AssertCommit2ConnectorsE {
+            connectors_e: connector_e2_commitment_public_keys
+                .iter()
+                .map(|x| {
+                    ConnectorE::new(
+                        network,
+                        &operator_pubkey,
+                        x,
+                    )
+                })
+                .collect(),
+        };
+        assert_commit2_tx.sign(
+            &assert_commit2_connectors_e, 
+            assert_commit2_witness,
+        );
+        let signed_assert_commit2_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(assert_commit2_tx.finalize())).unwrap();
+        let signed_assert_commit2_tx_file = format!("{}{}", &conf.general.signed_txns_dir, ASSERT_COMMIT_2_FILE_NAME);
+        write_bytes_to_file(&signed_assert_commit2_tx_bytes, &signed_assert_commit2_tx_file);
+        println!("assert_commit2_tx was written to {}", signed_assert_commit2_tx_file);
+    }
+
+    {   // assert-final
+        println!("\nloading assert-final-tx...");
+        let assert_final_file = format!("{}{}", &conf.general.txns_dir, ASSERT_FINAL_FILE_NAME);
+        assert!(file_exists(&assert_final_file), "assert_final_file tx not provided");
+        let file = File::open(assert_final_file.clone()).expect(&format!("fail to open {:?}", assert_final_file));
+        let reader = BufReader::new(file);
+        let mut assert_final_tx: AssertFinalTransaction = serde_json::from_reader(reader).unwrap();
+        assert!(assert_final_tx.tx().input[0].witness != Witness::default(), "assert_final_tx not pre-signed");
+        println!("signing assert-final-tx...");
+        assert_final_tx.sign_commit_inputs(&operator_context);
+
+        let signed_assert_final_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(assert_final_tx.finalize())).unwrap();
+        let signed_assert_final_tx_file = format!("{}{}", &conf.general.signed_txns_dir, ASSERT_FINAL_FILE_NAME);
+        write_bytes_to_file(&signed_assert_final_tx_bytes, &signed_assert_final_tx_file);
+        println!("assert_final_tx was written to {}", signed_assert_final_tx_file);
+    }
+}
+
+pub(crate) fn handle_operator_sign_take2(conf: Config) {
+    println!("\nloading config...");
+    let network = match_network(&conf.general.network).unwrap();
+
+    let federation_taproot_pubkey = &conf.general.federation_taproot_pubkey.expect("federation_taproot_pubkey is not provided in the configuration file");
+    let federation_taproot_pubkey = XOnlyPublicKey::from_str(federation_taproot_pubkey).expect("invalid federation_taproot_pubkey");
+        
+    let federation_pubkeys = conf.general.federation_pubkeys.expect("federation_pubkeys is not provided in the configuration file");
+    let federation_pubkeys: Vec<PublicKey> = federation_pubkeys.into_iter()
+        .map(|str| PublicKey::from_str(&str).expect("invalid federation_pubkey {str}"))
+        .collect();
+
+    let operator_seckey = &conf.operator.operator_seckey.expect("operator_seckey not provided");
+    let operator_pubkey = &conf.general.operator_pubkey.expect("operator_pubkey is not provided in the configuration file");
+    let operator_pubkey = PublicKey::from_str(operator_pubkey).expect("invalid operator_pubkey");
+    let operator_taproot_pubkey = XOnlyPublicKey::from(operator_pubkey);
+    let (_,pubkey_from_sec) = generate_keys_from_secret(network, operator_seckey);
+    assert_eq!(pubkey_from_sec, operator_pubkey, "operatot_seckey & operator_pubkey not match");
+    let operator_context = OperatorContext::new(network, operator_seckey, &federation_pubkeys);
+    assert_eq!(operator_context.n_of_n_taproot_public_key, federation_taproot_pubkey, "federation_taproot_pubkey not aggregated from federation_pubkeys");
+
+    println!("loading operator wots public-keys...");
+    assert!(file_exists(&conf.general.operator_wots_pubkey_file), "operator wots public key not provided");
+    let operator_wots_pubkeys = load_wots_pubkeys(&conf.general.operator_wots_pubkey_file);
+    let (connector_e1_commitment_public_keys, connector_e2_commitment_public_keys) = split_pubkeys(&operator_wots_pubkeys.1);
+    let assert_commitment_public_keys = merge_to_connector_c_commits_public_key(
+        &connector_e1_commitment_public_keys,
+        &connector_e2_commitment_public_keys,
+    );
+
+    println!("loading disprove scripts...");
+    assert!(file_exists(&conf.general.disprove_scripts_file), "disprove scripts not provided");
+    let disprove_scripts_bytes = load_scripts_bytes_from_file(&conf.general.disprove_scripts_file);
+
+    println!("\nloading take2-tx...");
+    let take2_file = format!("{}{}", &conf.general.txns_dir, TAKE2_FILE_NAME);
+    assert!(file_exists(&take2_file), "take-2 tx not provided");
+    let file = File::open(take2_file.clone()).expect(&format!("fail to open {:?}", take2_file));
+    let reader = BufReader::new(file);
+    let mut take2_tx: Take2Transaction = serde_json::from_reader(reader).unwrap();
+    assert!(take2_tx.tx().input[0].witness != Witness::default(), "take2_tx not pre-signed");
+    assert!(take2_tx.tx().input[2].witness != Witness::default(), "take2_tx not pre-signed");
+    println!("signing take2-tx...");
+    take2_tx.sign_input_1(
+        &operator_context,
+    );
+    let connector_c = ConnectorC::new_from_scripts(
+        network,
+        &operator_taproot_pubkey,
+        assert_commitment_public_keys,
+        disprove_scripts_bytes,
+    );
+    take2_tx.sign_input_3(
+        &operator_context, 
+        &connector_c,
+    );
+
+    let signed_take2_tx_bytes =  serde_json::to_vec_pretty(&SignedTransaction::new(take2_tx.finalize())).unwrap();
+    let signed_take2_tx_file = format!("{}{}", &conf.general.signed_txns_dir, TAKE2_FILE_NAME);
+    write_bytes_to_file(&signed_take2_tx_bytes, &signed_take2_tx_file);
+    println!("assert_take2_tx was written to {}", signed_take2_tx_file);
 }
 
 pub(crate) fn secrets_to_pubkeys(secrets: &WotsSecretKeys) -> WotsPublicKeys {

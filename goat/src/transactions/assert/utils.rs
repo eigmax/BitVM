@@ -14,6 +14,8 @@ use bitvm::{
     signatures::signing_winternitz::{WinternitzPublicKey, WinternitzSecret}
 };
 
+pub const MAX_CONNECTORS_E_PER_TX: usize = 300;
+
 /// The number of connector e is related to the number of intermediate values.
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct AssertCommit1ConnectorsE {
@@ -78,8 +80,8 @@ pub fn sign_assert_tx_with_groth16_proof(
 
     let raw = utils_raw_witnesses_from_signatures(&sigs);
 
-    let raw1 = raw[0..300].to_vec();
-    let raw2 = raw[300..].to_vec();
+    let raw1 = raw[0..MAX_CONNECTORS_E_PER_TX].to_vec();
+    let raw2 = raw[MAX_CONNECTORS_E_PER_TX..].to_vec();
 
     (raw1, raw2)
 }
@@ -88,7 +90,7 @@ pub fn split_pubkeys(raw_pubkeys: &ApiPublicKeys) -> (
     Vec<BTreeMap<CommitmentMessageId, WinternitzPublicKey>>,
     Vec<BTreeMap<CommitmentMessageId, WinternitzPublicKey>>,
 ) {
-    let connectors_e_of_transaction = 300;
+    let connectors_e_of_transaction = MAX_CONNECTORS_E_PER_TX;
     let mut connector_e1_commitment_public_keys = vec![];
     let mut connector_e2_commitment_public_keys = vec![];
 
@@ -136,7 +138,7 @@ pub fn groth16_commitment_secrets_to_public_keys(
         commitment_secrets.clone().into_iter().collect();
 
     // see the unit test: assigner.rs/test_commitment_size
-    let connectors_e_of_transaction = 300;
+    let connectors_e_of_transaction = MAX_CONNECTORS_E_PER_TX;
     let mut connector_e1_commitment_public_keys = vec![];
     let mut connector_e2_commitment_public_keys = vec![];
 

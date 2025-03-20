@@ -29,12 +29,16 @@ pub(crate) enum Commands {
         amount: u64,
     },
 
-    // /// -FEDERATION-: generate psbt for federation members
-    // GenerateFederationPsbt {
-    //     /// (hex String) federation member's public-key
-    //     // #[arg(long)]
-    //     pubkey: String,
-    // },
+    /// -DEPOSITOR--: sign pegin-confirm or pegin-refund
+    DepositorSign {
+        /// sign pegin-confirm txn
+        #[arg(long)]
+        pegin_confirm: bool,
+
+        /// sign pegin-refund txn
+        #[arg(long)]
+        pegin_refund: bool,
+    },
 
     /// -FEDERATION-: push federation members' pre-signature for necessary txns, include: pegin_comfirm, take_1, take_2, assert_final, disprove
     FederationPresign {
@@ -59,23 +63,31 @@ pub(crate) enum Commands {
         amount: u64,
     },
 
-    // /// -OPERATOR---: generate psbt for operator
-    // GenerateOperatorPsbt {
-    //     // #[arg(long)]
-    //     presign: bool,
-
-    //     // #[arg(long)]
-    //     kickoff: bool,
-
-    //     // #[arg(long)]
-    //     take1: bool,
-
-    //     // #[arg(long)]
-    //     take2: bool,
-    // },
-
     /// -OPERATOR---: push operator's pre-signature necessary txns, include: challenge
     OperatorPresign {
+    },
+
+    /// -OPERATOR---: operator sign txns: include: kickoff, take-1, assert, take-2
+    OperatorSign {
+        /// sign kickoff txn; evm-withdraw-txid is required
+        #[arg(long)]
+        kickoff: bool,
+
+        /// will be commited in kickoff
+        #[arg(long)]
+        evm_withdraw_txid: Option<String>,
+
+        /// sign take-1 txn
+        #[arg(long)]
+        take_1: bool,
+
+        /// sign assert txn; include: assert-inital, assert-commit, assert-final; proof is required
+        #[arg(long)]
+        assert: bool,
+
+        /// sign take-2 txn
+        #[arg(long)]
+        take_2: bool,
     },
 
     /// -OPERATOR---: generate winternitz public-keys & secret-keys 
@@ -93,15 +105,39 @@ pub(crate) enum Commands {
         skip_validation: bool,
     },
 
-    // /// -CHALLENGER-: check if kickoff-tx is valid
-    // ValidateKickoff {
-    // },
-
-    // /// -CHALLENGER-: check if the groth16-proof(bitcommitments) submitted by operator in assert-tx is valid 
-    // ValidateAssert {
-    // },
-
     /// -CHALLENGER-: check if the groth16-proof(bitcommitments) is valid 
     VerifyProof {
-    }
+    },
+
+    /* 
+    /// -FEDERATION-: generate psbt for federation members
+    GenerateFederationPsbt {
+        /// (hex String) federation member's public-key
+        // #[arg(long)]
+        pubkey: String,
+    },
+    
+    /// -OPERATOR---: generate psbt for operator
+    GenerateOperatorPsbt {
+        // #[arg(long)]
+        presign: bool,
+
+        // #[arg(long)]
+        kickoff: bool,
+
+        // #[arg(long)]
+        take1: bool,
+
+        // #[arg(long)]
+        take2: bool,
+    },
+
+    /// -CHALLENGER-: check if kickoff-tx is valid
+    ValidateKickoff {
+    },
+
+    /// -CHALLENGER-: check if the groth16-proof(bitcommitments) submitted by operator in assert-tx is valid 
+    ValidateAssert {
+    },
+    */
 }

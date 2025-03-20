@@ -200,7 +200,7 @@ impl Take2Transaction {
         );
     }
 
-    fn sign_input_1(&mut self, context: &OperatorContext) {
+    pub fn sign_input_1(&mut self, context: &OperatorContext) {
         let input_index = 1;
         pre_sign_p2wsh_input(
             self,
@@ -242,7 +242,7 @@ impl Take2Transaction {
         );
     }
 
-    fn sign_input_3(&mut self, context: &OperatorContext, connector_c: &ConnectorC) {
+    pub fn sign_input_3(&mut self, context: &OperatorContext, connector_c: &ConnectorC) {
         let input_index = 3;
         let prev_outs = &self.prev_outs().clone();
         let merkle_root = connector_c.taproot_merkle_root();
