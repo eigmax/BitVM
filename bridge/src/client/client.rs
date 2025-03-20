@@ -43,8 +43,9 @@ use crate::{
 };
 
 use bitvm::{
-    // chunker::disprove_execution::RawProof, 
-    chunk::api::type_conversion_utils::RawProof, signatures::signing_winternitz::WinternitzSecret
+    // chunker::disprove_execution::RawProof,
+    chunk::api::type_conversion_utils::RawProof,
+    signatures::signing_winternitz::WinternitzSecret,
 };
 
 use super::{
@@ -147,41 +148,17 @@ impl BitVMClient {
         file_path_prefix: Option<&str>,
         zkproof_verifying_key: Option<ZkProofVerifyingKey>,
     ) -> Self {
-        let mut depositor_context = None;
-        if depositor_secret.is_some() {
-            depositor_context = Some(DepositorContext::new(
-                source_network,
-                depositor_secret.unwrap(),
-                n_of_n_public_keys,
-            ));
-        }
+        let depositor_context = depositor_secret
+            .map(|secret| DepositorContext::new(source_network, secret, n_of_n_public_keys));
 
-        let mut operator_context = None;
-        if operator_secret.is_some() {
-            operator_context = Some(OperatorContext::new(
-                source_network,
-                operator_secret.unwrap(),
-                n_of_n_public_keys,
-            ));
-        }
+        let operator_context = operator_secret
+            .map(|secret| OperatorContext::new(source_network, secret, n_of_n_public_keys));
 
-        let mut verifier_context = None;
-        if verifier_secret.is_some() {
-            verifier_context = Some(VerifierContext::new(
-                source_network,
-                verifier_secret.unwrap(),
-                n_of_n_public_keys,
-            ));
-        }
+        let verifier_context = verifier_secret
+            .map(|secret| VerifierContext::new(source_network, secret, n_of_n_public_keys));
 
-        let mut withdrawer_context = None;
-        if withdrawer_secret.is_some() {
-            withdrawer_context = Some(WithdrawerContext::new(
-                source_network,
-                withdrawer_secret.unwrap(),
-                n_of_n_public_keys,
-            ));
-        }
+        let withdrawer_context = withdrawer_secret
+            .map(|secret| WithdrawerContext::new(source_network, secret, n_of_n_public_keys));
 
         let (n_of_n_public_key, _) = generate_n_of_n_public_key(n_of_n_public_keys);
 
@@ -237,12 +214,18 @@ impl BitVMClient {
         }
     }
 
-    pub fn data(&self) -> &BitVMClientPublicData { &self.data }
+    pub fn data(&self) -> &BitVMClientPublicData {
+        &self.data
+    }
 
-    pub fn data_mut(&mut self) -> &mut BitVMClientPublicData { &mut self.data }
+    pub fn data_mut(&mut self) -> &mut BitVMClientPublicData {
+        &mut self.data
+    }
 
     // TODO: This should be private. Currently used in the fees test. See if it can be refactored.
-    pub fn private_data(&self) -> &BitVMClientPrivateData { &self.private_data }
+    pub fn private_data(&self) -> &BitVMClientPrivateData {
+        &self.private_data
+    }
 
     // TODO: This fn is only used in tests. Consider refactoring, so it can be removed.
     pub fn set_chain_service(&mut self, chain_service: Chain) {
@@ -253,11 +236,17 @@ impl BitVMClient {
         save_local_private_file(&self.local_file_path, &serialize(&self.private_data));
     }
 
-    pub async fn sync(&mut self) { self.read_from_data_store().await; }
+    pub async fn sync(&mut self) {
+        self.read_from_data_store().await;
+    }
 
-    pub async fn sync_l2(&mut self) { self.read_from_l2().await; }
+    pub async fn sync_l2(&mut self) {
+        self.read_from_l2().await;
+    }
 
-    pub async fn flush(&mut self) { self.save_to_data_store().await; }
+    pub async fn flush(&mut self) {
+        self.save_to_data_store().await;
+    }
 
     /*
     Expected file syncing flow with data store:

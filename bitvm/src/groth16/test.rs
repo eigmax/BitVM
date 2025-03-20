@@ -1,5 +1,5 @@
-use crate::groth16::verifier::Verifier;
 use crate::execute_script_without_stack_limit;
+use crate::groth16::verifier::Verifier;
 use ark_bn254::Bn254;
 use ark_crypto_primitives::snark::{CircuitSpecificSetupSNARK, SNARK};
 use ark_ec::pairing::Pairing;
@@ -11,23 +11,12 @@ use ark_std::{end_timer, start_timer, test_rng, UniformRand};
 use bitcoin_script::script;
 use rand::{RngCore, SeedableRng};
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 struct DummyCircuit<F: PrimeField> {
     pub a: Option<F>,
     pub b: Option<F>,
     pub num_variables: usize,
     pub num_constraints: usize,
-}
-
-impl<F: PrimeField> Clone for DummyCircuit<F> {
-    fn clone(&self) -> Self {
-        DummyCircuit {
-            a: self.a,
-            b: self.b,
-            num_variables: self.num_variables,
-            num_constraints: self.num_constraints,
-        }
-    }
 }
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for DummyCircuit<F> {
@@ -103,8 +92,12 @@ fn test_hinted_groth16_verifier_small_public() {
     let k = 6;
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
     let circuit = DummyCircuit::<<E as Pairing>::ScalarField> {
-        a: Some(<E as Pairing>::ScalarField::from_bigint(BigInt::from(u32::rand(&mut rng))).unwrap()),
-        b: Some(<E as Pairing>::ScalarField::from_bigint(BigInt::from(u32::rand(&mut rng))).unwrap()),
+        a: Some(
+            <E as Pairing>::ScalarField::from_bigint(BigInt::from(u32::rand(&mut rng))).unwrap(),
+        ),
+        b: Some(
+            <E as Pairing>::ScalarField::from_bigint(BigInt::from(u32::rand(&mut rng))).unwrap(),
+        ),
         num_variables: 10,
         num_constraints: 1 << k,
     };

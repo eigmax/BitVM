@@ -142,11 +142,12 @@ pub fn calculate_s(
 }
 
 fn get_w_pos(i: u32) -> u32 {
-    
     (i + 1) * 8
 }
 
-fn get_extra_pos(i: u32) -> u32 { (i - 16) * 8 }
+fn get_extra_pos(i: u32) -> u32 {
+    (i - 16) * 8
+}
 
 fn get_pos_var(name: char) -> u32 {
     let i = match name {
@@ -252,7 +253,9 @@ pub fn schedule_iteration(
     }
 }
 
-fn get_full_w_pos(top_table: u32, i: u32) -> u32 { top_table - (i + 1) * 8 }
+fn get_full_w_pos(top_table: u32, i: u32) -> u32 {
+    top_table - (i + 1) * 8
+}
 
 pub fn sha256(num_bytes: u32) -> Script {
     // up to 55 is one block and always supports add table
@@ -468,6 +471,7 @@ mod tests {
 
     use crate::hash::sha256_u4::*;
     use crate::{execute_script, treepp::script};
+    use bitcoin::hex::DisplayHex;
     use sha2::{Digest, Sha256};
 
     #[test]
@@ -540,18 +544,10 @@ mod tests {
     #[test]
     fn test_sha256_strs() {
         let message = "Hello.";
-        let hex: String = message
-            .as_bytes()
-            .iter()
-            .map(|&b| format!("{:02x}", b))
-            .collect();
+        let hex: String = message.as_bytes().to_lower_hex_string();
         test_sha256(&hex);
         let message = "This is a longer message that still fits in one block!";
-        let hex: String = message
-            .as_bytes()
-            .iter()
-            .map(|&b| format!("{:02x}", b))
-            .collect();
+        let hex: String = message.as_bytes().to_lower_hex_string();
         test_sha256(&hex)
     }
 

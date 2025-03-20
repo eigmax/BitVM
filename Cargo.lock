@@ -1965,7 +1965,10 @@ name = "bitvm-fuzz"
 version = "0.0.0"
 dependencies = [
  "arbitrary",
+ "bitcoin",
+ "bitcoin-script-stack",
  "bitvm",
+ "blake3",
  "libfuzzer-sys",
 ]
 
@@ -2076,6 +2079,7 @@ dependencies = [
  "bitvm",
  "clap",
  "colored",
+ "derive_more 2.0.1",
  "dotenv",
  "esplora-client",
  "futures",

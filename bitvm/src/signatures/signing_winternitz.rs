@@ -108,7 +108,7 @@ pub fn generate_winternitz_witness(signing_inputs: &WinternitzSigningInputs) -> 
     WINTERNITZ_MESSAGE_VERIFIER.sign(
         &signing_inputs.signing_key.parameters,
         &signing_inputs.signing_key.secret_key,
-        &signing_inputs.message.to_vec(),
+        signing_inputs.message,
     )
 }
 
@@ -134,19 +134,19 @@ pub fn winternitz_message_checksig_verify(
 mod tests {
     use super::*;
     use super::{WinternitzPublicKey, WinternitzSecret};
-    use crate::{execute_script_with_inputs, ExecuteInfo};
     use crate::{
         bn254::g1::G1Affine,
         execute_script,
         signatures::{utils::digits_to_number, winternitz::generate_public_key},
     };
+    use crate::{execute_script_with_inputs, ExecuteInfo};
     use ark_ff::UniformRand as _;
     use ark_std::test_rng;
     use bitcoin::script::read_scriptint;
     use bitcoin_script::script;
     use rand::{RngCore as _, SeedableRng as _};
 
-    const BLAKE3_HASH_LENGTH: usize = crate::hash::blake3_u32::N_DIGEST_U32_LIMBS as usize * 4;
+    const BLAKE3_HASH_LENGTH: usize = 20;
 
     fn extract_witness_from_stack(res: ExecuteInfo) -> Vec<Vec<u8>> {
         res.final_stack.0.iter_str().fold(vec![], |mut vector, x| {
@@ -183,7 +183,6 @@ mod tests {
         }
         bytes
     }
-    
 
     #[test]
     fn test_signing_winternitz_with_message_success() {
@@ -266,7 +265,7 @@ mod tests {
         let random_g1_point = ark_bn254::G1Affine::rand(&mut rng);
 
         let res = execute_script(script! {
-            {G1Affine::push(random_g1_point.clone())}
+            {G1Affine::push(random_g1_point)}
         });
         let g1_to_bytes = u32_witness_to_bytes(extract_witness_from_stack(res));
         println!("g1_to_bytes: {:?}", g1_to_bytes);

@@ -1,22 +1,21 @@
-use crate::treepp::*;
 use crate::pseudo::{push_to_stack, OP_256MUL, OP_4DUP};
-
+use crate::treepp::*;
 
 /// Pushes a value as u32 element onto the stack, least significant part being on top
 pub fn u32_push(value: u32) -> Script {
     script! {
         //optimization
-        if (value >> 24 & 0xff) == (value >> 16 & 0xff) &&
-            (value >> 24 & 0xff) == (value >> 8 & 0xff) &&
-            (value >> 24 & 0xff) == (value & 0xff) {
+        if ((value >> 24) & 0xff) == ((value >> 16) & 0xff) &&
+            ((value >> 24) & 0xff) == ((value >> 8) & 0xff) &&
+            ((value >> 24) & 0xff) == (value & 0xff) {
 
-                { push_to_stack((value >> 24 & 0xff) as usize, 4) }
+                { push_to_stack(((value >> 24) & 0xff) as usize, 4) }
         }
         else{
 
-                {value >> 24 & 0xff}
-                {value >> 16 & 0xff}
-                {value >>  8 & 0xff}
+                {(value >> 24) & 0xff}
+                {(value >> 16) & 0xff}
+                {(value >>  8) & 0xff}
                 {value & 0xff}
         }
     }
@@ -222,7 +221,6 @@ pub fn u32_uncompress() -> Script {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::Rng;
 
     #[test]
     fn test_u32_push() {
@@ -240,15 +238,20 @@ mod test {
         run(script);
     }
 
+    // This unit test has really strange semantics.
+    // A number modulo 1 will always be 0.
+    // I commented out the broken lines and added lines with the current, real semantics.
+    // TODO: If someone knows the intended semantics, please update the unit.
     #[test]
     fn test_with_u32_compress() {
-        let mut rng = rand::thread_rng();
+        // let mut rng = rand::thread_rng();
         for _ in 0..30 {
-            let mut origin_value0: u32 = rng.gen();
-            origin_value0 = (origin_value0 % 1) << 31;
-            let mut origin_value1: u32 = rng.gen();
-            origin_value1 = (origin_value1 % 1) << 31;
-
+            // let mut origin_value0: u32 = rng.gen();
+            // origin_value0 = (origin_value0 % 1) << 31;
+            // let mut origin_value1: u32 = rng.gen();
+            // origin_value1 = (origin_value1 % 1) << 31;
+            let origin_value0 = 0u32;
+            let origin_value1 = 0u32;
             let v = origin_value0 + origin_value1;
 
             let script = script! {
